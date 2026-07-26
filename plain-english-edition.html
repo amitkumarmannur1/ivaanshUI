@@ -1,0 +1,527 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Plain English Edition — Nginx, Kubernetes, Envoy, mTLS explained like you're new</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#FBF9F4; --ink:#22303A; --soft:#5C6B75; --card:#FFFFFF; --line:#E2DED3;
+  --green:#1B7A46; --green-bg:#EAF5EE;
+  --blue:#2C5FB3; --blue-bg:#EBF1FB;
+  --red:#B5493A; --red-bg:#FBEFEC;
+  --gold:#9A6B15; --gold-bg:#FAF3E3;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{font-family:'Atkinson Hyperlegible',sans-serif;background:var(--paper);color:var(--ink);
+  font-size:17.5px;line-height:1.75}
+.wrap{max-width:820px;margin:0 auto;padding:0 22px}
+header.hero{padding:64px 0 34px;border-bottom:4px solid var(--ink)}
+.kicker{font-family:'IBM Plex Mono',monospace;font-size:12px;letter-spacing:.16em;color:var(--green);font-weight:600;text-transform:uppercase}
+h1{font-family:'Fraunces',serif;font-weight:700;font-size:clamp(30px,5.6vw,50px);line-height:1.08;margin:14px 0 16px}
+.hero p{font-size:19px;color:var(--soft);max-width:640px}
+nav.toc{position:sticky;top:0;z-index:40;background:var(--ink);overflow-x:auto;white-space:nowrap}
+nav.toc::-webkit-scrollbar{display:none}
+nav.toc a{display:inline-block;color:#C6CDD3;font-family:'IBM Plex Mono',monospace;font-size:12px;padding:11px 12px;text-decoration:none}
+nav.toc a:hover{background:var(--green);color:#fff}
+section{padding:54px 0 10px}
+h2{font-family:'Fraunces',serif;font-size:clamp(25px,4vw,36px);line-height:1.15;margin:8px 0 6px}
+.chip{font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:600;letter-spacing:.1em;color:#fff;background:var(--green);padding:4px 10px;border-radius:20px;display:inline-block}
+h3{font-family:'Fraunces',serif;font-size:22px;margin:34px 0 10px}
+p{margin-bottom:15px;max-width:70ch}
+strong{font-weight:700}
+em{font-style:italic}
+.ab{border-bottom:2px dotted var(--green);cursor:help}
+/* boxes */
+.plain{background:var(--green-bg);border:1px solid #C4E0CE;border-radius:10px;padding:16px 20px;margin:18px 0}
+.plain .t{font-family:'IBM Plex Mono',monospace;font-size:11.5px;font-weight:600;letter-spacing:.12em;color:var(--green);display:block;margin-bottom:6px}
+.eg{background:var(--card);border:1px solid var(--line);border-left:5px solid var(--blue);border-radius:8px;padding:14px 18px;margin:14px 0}
+.eg .t{font-family:'IBM Plex Mono',monospace;font-size:11.5px;font-weight:600;letter-spacing:.12em;color:var(--blue);display:block;margin-bottom:5px}
+.eg p{margin-bottom:8px} .eg p:last-child{margin-bottom:0}
+.gotcha{background:var(--red-bg);border:1px solid #EBC7C0;border-left:5px solid var(--red);border-radius:8px;padding:14px 18px;margin:14px 0}
+.gotcha .t{font-family:'IBM Plex Mono',monospace;font-size:11.5px;font-weight:600;letter-spacing:.12em;color:var(--red);display:block;margin-bottom:5px}
+.why{background:var(--gold-bg);border:1px solid #E8D5A8;border-left:5px solid var(--gold);border-radius:8px;padding:14px 18px;margin:14px 0}
+.why .t{font-family:'IBM Plex Mono',monospace;font-size:11.5px;font-weight:600;letter-spacing:.12em;color:var(--gold);display:block;margin-bottom:5px}
+.why p,.plain p,.gotcha p{margin-bottom:8px}
+.why p:last-child,.plain p:last-child,.gotcha p:last-child{margin-bottom:0}
+ul,ol{margin:0 0 16px 24px;max-width:68ch} li{margin-bottom:8px}
+table{border-collapse:collapse;width:100%;margin:16px 0;font-size:15px;background:var(--card);border:1px solid var(--line)}
+th{font-family:'IBM Plex Mono',monospace;font-size:11.5px;letter-spacing:.06em;text-transform:uppercase;text-align:left;background:var(--ink);color:#EFEBE2;padding:10px 12px}
+td{padding:10px 12px;border-top:1px solid var(--line);vertical-align:top}
+tr:nth-child(even) td{background:#F7F4EC}
+figure{margin:24px 0;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:18px;overflow-x:auto}
+figcaption{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--soft);margin-top:10px}
+svg{display:block;max-width:100%;height:auto}
+svg text{font-family:'Atkinson Hyperlegible',sans-serif}
+.flow{stroke-dasharray:6 7;animation:dash 1.2s linear infinite}
+@keyframes dash{to{stroke-dashoffset:-13}}
+@media(prefers-reduced-motion:reduce){.flow{animation:none}}
+.divider{height:1px;background:var(--line);margin:46px 0 0}
+footer{border-top:4px solid var(--ink);margin-top:60px;padding:26px 0 60px;color:var(--soft);font-size:14px}
+code{font-family:'IBM Plex Mono',monospace;font-size:.88em;background:#F0EDE4;border:1px solid var(--line);border-radius:4px;padding:1px 6px}
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="wrap">
+    <span class="kicker">The Plain English Edition · no prior knowledge assumed</span>
+    <h1>What actually happens when you tap a button on your phone — explained slowly.</h1>
+    <p>The other document (the "field manual") is written for interview speed. This one is written for <strong>understanding</strong>. Every abbreviation is spelled out every time. Every idea gets an everyday comparison and at least two examples. Almost no code. Read it top to bottom like a book.</p>
+  </div>
+</header>
+
+<nav class="toc">
+  <div class="wrap" style="padding:0">
+    <a href="#c0">0 · WORDS</a><a href="#c1">1 · THE JOURNEY</a><a href="#c2">2 · NGINX</a><a href="#c3">3 · SPEED</a><a href="#c4">4 · RATE LIMITS</a><a href="#c5">5 · WHO ARE YOU</a><a href="#c6">6 · BAD TRAFFIC</a><a href="#c7">7 · KUBERNETES</a><a href="#c8">8 · SIDECAR</a><a href="#c9">9 · mTLS</a><a href="#c10">10 · AI GATEWAY</a><a href="#c11">11 · RECAP</a>
+  </div>
+</nav>
+
+<main class="wrap">
+
+<!-- ============ CH 0 ============ -->
+<section id="c0">
+  <span class="chip">CHAPTER 0</span>
+  <h2>First, the words</h2>
+  <p>Most confusion in this subject is not about ideas — it's about <strong>vocabulary</strong>. Engineers use short codes for everything. Here is every abbreviation this document uses, with what it stands for and what it <em>means in plain words</em>. You don't need to memorize this table; come back to it whenever a word feels foggy. And inside the chapters, I will still spell each one out when I use it.</p>
+  <table>
+    <tr><th>Short</th><th>Stands for</th><th>In plain words</th></tr>
+    <tr><td><strong>HTTP</strong></td><td>HyperText Transfer Protocol</td><td>The "language" your phone and a website use to ask for and send pages. Like the standard format of a letter: address on top, request inside.</td></tr>
+    <tr><td><strong>HTTPS</strong></td><td>HTTP Secure</td><td>The same letter, but sealed in an envelope nobody else can open. The "S" is the padlock icon in your browser.</td></tr>
+    <tr><td><strong>TLS</strong></td><td>Transport Layer Security</td><td>The technology that does that sealing (the encryption). HTTPS = HTTP + TLS.</td></tr>
+    <tr><td><strong>mTLS</strong></td><td>mutual TLS</td><td>Normal TLS: only the website proves who it is. Mutual TLS: <em>both</em> sides show ID — like two strangers both checking each other's passports.</td></tr>
+    <tr><td><strong>IP address</strong></td><td>Internet Protocol address</td><td>A machine's "street address" on the internet, like 142.250.72.14. Letters (data) get delivered to it.</td></tr>
+    <tr><td><strong>DNS</strong></td><td>Domain Name System</td><td>The internet's phone book. You type google.com; DNS looks up the IP address (the street address) for it.</td></tr>
+    <tr><td><strong>TCP</strong></td><td>Transmission Control Protocol</td><td>The delivery rules that make sure data arrives complete and in order — like a courier who numbers every parcel and gets a signature.</td></tr>
+    <tr><td><strong>UDP</strong></td><td>User Datagram Protocol</td><td>The "just throw it over the fence" delivery: faster, no guarantees. Used for video calls, and by QUIC (below).</td></tr>
+    <tr><td><strong>L4 / L7</strong></td><td>Layer 4 / Layer 7</td><td>Layers of networking. Layer 4 sees only addresses on envelopes. Layer 7 opens the envelope and reads the letter (the HTTP request itself).</td></tr>
+    <tr><td><strong>LB</strong></td><td>Load Balancer</td><td>A "traffic officer" machine that spreads incoming requests across many worker machines so no single one is crushed.</td></tr>
+    <tr><td><strong>CPU</strong></td><td>Central Processing Unit</td><td>The computer's brain. A "core" is one lane of that brain; modern servers have 32–128 lanes.</td></tr>
+    <tr><td><strong>RAM</strong></td><td>Random Access Memory</td><td>The computer's short-term memory — fast, but wiped when power goes off.</td></tr>
+    <tr><td><strong>RPS</strong></td><td>Requests Per Second</td><td>How many questions a server is asked each second. A busy site might see 50,000 RPS.</td></tr>
+    <tr><td><strong>p99</strong></td><td>99th percentile</td><td>"The experience of the unluckiest 1 in 100 users." If p99 latency is 2 seconds, 1% of users waited 2+ seconds.</td></tr>
+    <tr><td><strong>K8s</strong></td><td>Kubernetes</td><td>Software that manages a fleet of servers and applications automatically. (The 8 replaces the eight letters "ubernete".) Think: an automated operations manager.</td></tr>
+    <tr><td><strong>JWT</strong></td><td>JSON Web Token</td><td>A digital ID card: a small signed note that says who you are and what you're allowed to do, carried with every request.</td></tr>
+    <tr><td><strong>CA</strong></td><td>Certificate Authority</td><td>A trusted "passport office" that issues digital certificates (digital passports) for websites and services.</td></tr>
+    <tr><td><strong>API</strong></td><td>Application Programming Interface</td><td>A menu of things one program lets another program ask it to do. "Order #4 with extra data, please."</td></tr>
+    <tr><td><strong>DDoS</strong></td><td>Distributed Denial of Service</td><td>An attack where thousands of hijacked computers flood a website with fake traffic to knock it offline.</td></tr>
+    <tr><td><strong>WAF</strong></td><td>Web Application Firewall</td><td>A security guard that reads incoming requests and blocks ones that look like attacks.</td></tr>
+    <tr><td><strong>SNI</strong></td><td>Server Name Indication</td><td>The one part of an encrypted connection that says, in the open, <em>which website</em> you're trying to reach — like the address on a sealed envelope.</td></tr>
+    <tr><td><strong>QUIC</strong></td><td>(a protocol name, originally "Quick UDP Internet Connections")</td><td>A newer, faster way to carry web traffic that hides even more from middlemen.</td></tr>
+    <tr><td><strong>IdP</strong></td><td>Identity Provider</td><td>The login service — the thing behind "Sign in with Microsoft/Google". It checks passwords and hands out ID tokens.</td></tr>
+    <tr><td><strong>CAE</strong></td><td>Continuous Access Evaluation</td><td>A way to cancel someone's access <em>immediately</em> when something changes (they're fired, their laptop is stolen), instead of waiting for their pass to expire.</td></tr>
+    <tr><td><strong>ML</strong></td><td>Machine Learning</td><td>Software that learns patterns from examples instead of following hand-written rules — used here to spot "suspicious-looking" content.</td></tr>
+    <tr><td><strong>MDM</strong></td><td>Mobile Device Management</td><td>Company software installed on work laptops/phones that lets the IT department configure and secure them.</td></tr>
+  </table>
+  <div class="plain"><span class="t">HOW TO READ THIS DOCUMENT</span>
+  <p>Each chapter has the same rhythm: the idea in plain words → a picture → two or three everyday examples → one "why this way and not the other way?" box → one common mistake. If a chapter feels heavy, read just the green boxes — they alone tell the whole story.</p></div>
+</section>
+<div class="divider"></div>
+
+<!-- ============ CH 1 ============ -->
+<section id="c1">
+  <span class="chip">CHAPTER 1</span>
+  <h2>The journey of a single tap</h2>
+  <p>You open an app and tap "Refresh." Somewhere, a message leaves your phone, crosses the world, and comes back — usually in less time than a blink. Let's follow that one message the whole way. Everything else in this document is a close-up of one step in this journey.</p>
+
+  <h3>Step 1 — Finding the address (DNS)</h3>
+  <p>Your phone wants to reach <code>shop.example.com</code>. But the internet doesn't deliver to names — it delivers to numbers called <strong>IP addresses</strong> (<span class="ab" title="Internet Protocol address = a machine's street address on the internet">Internet Protocol addresses</span>), like <code>203.0.113.5</code>. So first your phone asks the <strong>DNS</strong> (<span class="ab" title="Domain Name System = the internet's phone book">Domain Name System</span>, the internet's phone book): "What's the number for this name?"</p>
+  <div class="eg"><span class="t">EVERYDAY EXAMPLE</span>
+  <p>You want to call "Mom." Your contacts app turns "Mom" into her actual phone number. DNS does exactly that: name in, number out. You never see the number, but the call can't happen without it.</p>
+  <p>Second example: DNS is the receptionist you ask "which floor is the accounting department on?" before you can take the elevator. You need the floor number (the IP address) before you can go anywhere.</p></div>
+  <p>A clever detail: for a big company, the phone book gives a <em>different</em> answer depending on where you are. Someone in London gets the address of the London data center; someone in Tokyo gets Tokyo. That way your message travels the shortest distance.</p>
+
+  <h3>Step 2 — Getting to the right building (Anycast)</h3>
+  <p>Big services put the <em>same</em> address on many buildings around the world. The internet automatically routes your message to the <strong>nearest</strong> one. This trick is called <strong>Anycast</strong> ("send to any one of these, whichever is closest").</p>
+  <div class="why"><span class="t">WHY DO THIS INSTEAD OF ONE BIG BUILDING?</span>
+  <p>Two reasons a beginner can feel immediately. <strong>Speed:</strong> a message to a data center 100 miles away comes back faster than one 6,000 miles away — physics, nothing you can code around. <strong>Safety:</strong> if attackers try to flood the address with junk (a <strong>DDoS</strong> attack — <span class="ab" title="Distributed Denial of Service = flooding a site with fake traffic to knock it offline">Distributed Denial of Service</span>), their flood gets split across dozens of buildings instead of drowning one. Imagine a mob trying to jam one shop's door versus that same mob scattered across 40 shops — each shop barely notices.</p></div>
+
+  <h3>Step 3 — Picking a worker inside the building (the Load Balancer)</h3>
+  <p>Inside the data center there isn't one giant computer — there are hundreds. A <strong>load balancer</strong> (<span class="ab" title="Load Balancer = a traffic officer that spreads requests across many machines">LB</span>, a "traffic officer" machine) hands your message to one of them so no single computer gets overwhelmed.</p>
+  <div class="eg"><span class="t">EVERYDAY EXAMPLE</span>
+  <p>A supermarket with 20 checkout lanes and one person directing shoppers: "You — lane 7. You — lane 3." That director is the load balancer. Without them, everyone would pile into lane 1 and the other 19 would sit empty.</p></div>
+
+  <figure>
+  <svg viewBox="0 0 800 210" role="img" aria-label="The journey: phone to DNS to nearest building to a worker computer and back">
+    <defs><marker id="a1" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto"><path d="M0,0 L9,4.5 L0,9 z" fill="#22303A"/></marker></defs>
+    <g font-size="13" fill="#22303A">
+      <rect x="12" y="80" width="120" height="52" rx="8" fill="#fff" stroke="#22303A" stroke-width="1.5"/><text x="72" y="103" text-anchor="middle" font-weight="bold">Your phone</text><text x="72" y="121" text-anchor="middle" font-size="11" fill="#5C6B75">taps refresh</text>
+      <rect x="185" y="18" width="130" height="46" rx="8" fill="#EBF1FB" stroke="#2C5FB3" stroke-width="1.5"/><text x="250" y="40" text-anchor="middle" font-weight="bold" fill="#2C5FB3">DNS</text><text x="250" y="56" text-anchor="middle" font-size="11" fill="#2C5FB3">name → number</text>
+      <rect x="185" y="90" width="130" height="52" rx="8" fill="#fff" stroke="#22303A" stroke-width="1.5"/><text x="250" y="112" text-anchor="middle" font-weight="bold">Nearest</text><text x="250" y="129" text-anchor="middle" font-size="11" fill="#5C6B75">data center</text>
+      <rect x="370" y="90" width="130" height="52" rx="8" fill="#EAF5EE" stroke="#1B7A46" stroke-width="1.5"/><text x="435" y="112" text-anchor="middle" font-weight="bold" fill="#1B7A46">Traffic officer</text><text x="435" y="129" text-anchor="middle" font-size="11" fill="#1B7A46">(load balancer)</text>
+      <rect x="560" y="60" width="120" height="46" rx="8" fill="#fff" stroke="#22303A" stroke-width="1.5"/><text x="620" y="88" text-anchor="middle">Worker A</text>
+      <rect x="560" y="120" width="120" height="46" rx="8" fill="#fff" stroke="#22303A" stroke-width="1.5"/><text x="620" y="148" text-anchor="middle">Worker B</text>
+      <line class="flow" x1="132" y1="100" x2="250" y2="66" stroke="#2C5FB3" stroke-width="2" marker-end="url(#a1)"/>
+      <text x="150" y="82" font-size="10" fill="#2C5FB3">"what's the number?"</text>
+      <line class="flow" x1="132" y1="112" x2="183" y2="114" stroke="#1B7A46" stroke-width="2" marker-end="url(#a1)"/>
+      <line class="flow" x1="315" y1="116" x2="368" y2="116" stroke="#1B7A46" stroke-width="2" marker-end="url(#a1)"/>
+      <line class="flow" x1="500" y1="110" x2="558" y2="86" stroke="#1B7A46" stroke-width="2" marker-end="url(#a1)"/>
+      <line class="flow" x1="500" y1="120" x2="558" y2="140" stroke="#1B7A46" stroke-width="2" marker-end="url(#a1)"/>
+    </g>
+  </svg>
+  <figcaption>The first three steps. Notice your message hasn't even reached the software we'll spend most of this document on yet — that's the "worker."</figcaption>
+  </figure>
+
+  <div class="gotcha"><span class="t">COMMON MISUNDERSTANDING</span>
+  <p>Beginners often picture "a website" as one computer sitting somewhere. It almost never is. It's hundreds of identical computers in several buildings on several continents, with the phone book, the routing trick, and the traffic officer all working to hide that from you. When people say "the server," they usually mean "any one of the interchangeable worker computers."</p></div>
+  <p>The rest of this document zooms into that worker computer and the software running on it — starting with the most famous piece: <strong>Nginx</strong>.</p>
+</section>
+<div class="divider"></div>
+
+<!-- ============ CH 2 ============ -->
+<section id="c2">
+  <span class="chip">CHAPTER 2</span>
+  <h2>Nginx: the incredibly efficient receptionist</h2>
+  <p><strong>Nginx</strong> (say it "engine-x") is a program that receives web requests and either answers them or passes them to the right place. It runs on those worker computers. Its claim to fame is doing this for <em>tens of thousands</em> of visitors at once on a single computer. To see why that's impressive, look at the older way of doing it.</p>
+
+  <h3>The old way, and why it fell over</h3>
+  <p>The older popular program (Apache, in its classic mode) gave every single visitor their own dedicated helper — its own little worker inside the computer. That sounds nice, like a personal shopper for each customer. The problem: most visitors spend most of their time <em>waiting</em> — waiting for their phone to send the next bit of data over a slow connection. So you end up with 10,000 personal shoppers, 9,900 of them just standing around waiting, each one taking up memory and attention.</p>
+  <div class="eg"><span class="t">EVERYDAY EXAMPLE</span>
+  <p>Imagine a call center that hires one employee per phone call and tells them "stay on this call until it ends, even during long silences." During a call where the customer keeps saying "hold on, let me find my card…", that employee can't help anyone else. Hire 10,000 employees for 10,000 calls and your office is full of people listening to silence. That's the old model, and it's why it collapsed under crowds. This problem even had a nickname: the "10,000 connections problem."</p></div>
+
+  <h3>Nginx's trick: one alert receptionist, not a crowd of helpers</h3>
+  <p>Nginx uses a handful of workers — usually <strong>one per CPU core</strong> (<span class="ab" title="Central Processing Unit = the computer's brain; a core is one lane of it">one per lane of the computer's brain</span>). Each worker handles thousands of visitors by never sitting idle waiting. Instead of assigning a helper to each visitor and waiting, the worker keeps a list and constantly asks the computer: <strong>"Which of my ten thousand visitors has something ready for me right now?"</strong> It handles only those, then asks again. Blink, ask, handle, repeat — thousands of times a second.</p>
+  <div class="eg"><span class="t">EVERYDAY EXAMPLE</span>
+  <p>A great diner waiter with 20 tables. They don't stand frozen at table 1 waiting for those guests to finish deciding. They circle the room, and only stop where a hand is raised. One waiter, twenty tables, nobody neglected — because the waiter spends effort only where there's actually something to do.</p>
+  <p>Second example: a chess master playing 20 opponents at once, walking down the row. At each board they make their move in seconds and move on; the opponents spend most of the time thinking. One master "handles" 20 games because the work is tiny and the waiting belongs to the other side. Nginx handles thousands of connections for the same reason — the waiting isn't its job.</p></div>
+
+  <figure>
+  <svg viewBox="0 0 800 200" role="img" aria-label="Old model: one helper per visitor, mostly idle. Nginx model: one worker circling many visitors.">
+    <g font-size="12" fill="#22303A">
+      <text x="200" y="24" text-anchor="middle" font-weight="bold" font-size="14">OLD WAY — one helper each, most just waiting</text>
+      <rect x="40" y="40" width="320" height="50" rx="8" fill="#FBEFEC" stroke="#B5493A"/>
+      <g fill="#B5493A" font-size="11">
+      <circle cx="70" cy="65" r="9" fill="#B5493A"/><text x="70" y="105" text-anchor="middle">idle</text>
+      <circle cx="110" cy="65" r="9" fill="#B5493A"/><text x="110" y="105" text-anchor="middle">idle</text>
+      <circle cx="150" cy="65" r="9" fill="#1B7A46"/><text x="150" y="105" text-anchor="middle" fill="#1B7A46">busy</text>
+      <circle cx="190" cy="65" r="9" fill="#B5493A"/><text x="190" y="105" text-anchor="middle">idle</text>
+      <circle cx="230" cy="65" r="9" fill="#B5493A"/><text x="230" y="105" text-anchor="middle">idle</text>
+      <circle cx="270" cy="65" r="9" fill="#B5493A"/><text x="270" y="105" text-anchor="middle">idle</text>
+      <circle cx="310" cy="65" r="9" fill="#B5493A"/><text x="330" y="105" text-anchor="middle">idle</text>
+      </g>
+      <text x="200" y="130" text-anchor="middle" font-size="11" fill="#5C6B75">7 helpers hired, 6 doing nothing but occupying space</text>
+      <text x="620" y="24" text-anchor="middle" font-weight="bold" font-size="14">NGINX WAY</text>
+      <rect x="470" y="40" width="300" height="80" rx="8" fill="#EAF5EE" stroke="#1B7A46"/>
+      <circle cx="620" cy="80" r="14" fill="#1B7A46"/><text x="620" y="84" text-anchor="middle" fill="#fff" font-size="10">1</text>
+      <g fill="#5C6B75"><circle cx="520" cy="60" r="7"/><circle cx="560" cy="100" r="7"/><circle cx="680" cy="58" r="7"/><circle cx="710" cy="98" r="7"/><circle cx="600" cy="105" r="7"/></g>
+      <line class="flow" x1="620" y1="80" x2="680" y2="58" stroke="#1B7A46" stroke-width="2"/>
+      <text x="620" y="140" text-anchor="middle" font-size="11" fill="#1B7A46">one worker, visits only whoever's ready</text>
+    </g>
+  </svg>
+  <figcaption>The whole reason Nginx is famous, in one picture: don't pay a helper to wait — have one alert worker visit only who's ready.</figcaption>
+  </figure>
+
+  <h3>The boss and the workers</h3>
+  <p>Nginx runs as one <strong>boss process</strong> plus several <strong>worker processes</strong>. (A "process" is just one running program.) The boss doesn't handle visitors at all. Its jobs are setup and supervision: read the settings, open the front doors (the network ports), and start the workers. If a worker ever crashes, the boss quietly starts a fresh one — visitors on the other workers never notice.</p>
+  <div class="why"><span class="t">WHY SEPARATE BOSS AND WORKERS?</span>
+  <p><strong>Safety.</strong> The boss holds the sensitive keys and has the power to open doors; the workers, who touch messages from strangers all day, are given <em>less</em> power. So if a worker is tricked or crashes, the damage is contained — like a shop where only the manager has the safe key, and the cashiers (who handle the public) can't open it even if a robber leans on them.</p>
+  <p><strong>Updates without downtime.</strong> When settings change, the boss starts <em>new</em> workers with the new settings and lets the <em>old</em> workers finish serving whoever they're already helping, then retires them. Nobody gets hung up on mid-conversation. It's like swapping in a fresh shift of waiters while the current ones finish their tables — the restaurant never closes.</p></div>
+  <div class="gotcha"><span class="t">COMMON MISUNDERSTANDING</span>
+  <p>"One worker per core" sounds like it limits how many <em>visitors</em> you can have. It doesn't. One worker comfortably juggles tens of thousands of visitors — because, remember, it's only ever doing tiny bits of active work and letting everyone else wait. The number of workers matches the number of brain-lanes (cores), not the number of visitors.</p></div>
+</section>
+<div class="divider"></div>
+
+<!-- ============ CH 3 ============ -->
+<section id="c3">
+  <span class="chip">CHAPTER 3</span>
+  <h2>Making it fast — and proving it's fast</h2>
+  <p>There are two separate skills here, and beginners often blur them. One is <em>making</em> a system fast. The other is <em>knowing</em> whether it's actually fast, with evidence rather than hope. Both matter.</p>
+
+  <h3>The single biggest speed win: don't repeat the handshake</h3>
+  <p>Every secure connection begins with a <strong>handshake</strong> — a short back-and-forth where the two sides agree on secret codes so they can talk privately. This handshake involves some heavy math, which costs the computer real effort. If every single request started a brand-new handshake, the computer would spend most of its energy shaking hands instead of doing useful work.</p>
+  <p>The fix is simple: <strong>keep connections open and reuse them</strong>, and when a returning visitor connects, <em>resume</em> the previous agreement instead of redoing the math from scratch.</p>
+  <div class="eg"><span class="t">EVERYDAY EXAMPLE</span>
+  <p>Think of the handshake as showing full ID and filling out forms to enter a building. If you had to do that for every single room you visit, you'd get nothing done. Instead, security gives you a badge on your first entry, and after that you just tap it. Reusing connections is that badge. It's not a small saving — it's often the difference between a server keeping up and falling over.</p></div>
+
+  <h3>A few other honest wins</h3>
+  <ul>
+    <li><strong>Don't do work you can avoid.</strong> If a thousand people ask for the exact same image, don't fetch it a thousand times — keep a copy nearby and hand it out. This "keep a copy nearby" idea is called <strong>caching</strong>, and we'll meet it again in Chapter 7.</li>
+    <li><strong>Send files the direct way.</strong> When sending a large file, a computer can hand it straight from its storage to the network without the receptionist software copying it around in between. Fewer copies, less effort.</li>
+    <li><strong>Match the number of workers to the number of brain-lanes.</strong> More workers than cores just makes the computer waste time switching between them — like a cook trying to stir more pots than they have hands, spilling as they rush between.</li>
+  </ul>
+
+  <h3>Now: how do you <em>prove</em> it's fast?</h3>
+  <p>This part is where real engineers separate from guessers. The key idea is which number you look at.</p>
+  <div class="plain"><span class="t">THE MOST IMPORTANT IDEA IN THIS CHAPTER</span>
+  <p>Don't measure the <strong>average</strong> speed. Measure the <strong>unlucky</strong> speed — often written <strong>p99</strong> (<span class="ab" title="99th percentile = the experience of the unluckiest 1 in 100 users">the 99th percentile</span>), meaning "how slow was it for the worst-off 1 person in 100?"</p></div>
+  <div class="eg"><span class="t">WHY THE UNLUCKY NUMBER, NOT THE AVERAGE</span>
+  <p>Imagine a restaurant where 99 dishes come out in 5 minutes and 1 takes 40 minutes. The <em>average</em> is a comfortable-sounding 5.3 minutes. But that average hides a furious customer. The average tells you the restaurant "feels fine"; the unlucky number tells you the truth someone actually lived.</p>
+  <p>Now the part that makes this urgent. Loading one modern web page isn't one request — it's often <em>fifty</em> small requests behind the scenes (your profile, your notifications, the menu, the images…). If each has a 1-in-100 chance of being slow, the chance that <em>at least one</em> of the fifty is slow is about <strong>40%</strong>. So nearly half of all page-loads feel slow, even though each individual piece is "99% fine." Averages completely hide this; the unlucky number catches it. This is why serious teams write their promises as "99% of requests finish under X," never as averages.</p></div>
+
+  <h3>Test it like real users, not like a polite robot</h3>
+  <p>When you load-test (deliberately blast a server with fake traffic to see when it breaks), there's a subtle trap. Some testing tools wait for each response before sending the next request. So when the server starts slowing down, the polite tool <em>also</em> slows down — and hides the very problem you're hunting.</p>
+  <div class="eg"><span class="t">EVERYDAY EXAMPLE</span>
+  <p>You want to test if a bridge sags under rush-hour traffic. A bad test sends one car, waits for it to fully cross, then sends the next. The bridge never feels rush hour, so it "passes." A good test sends cars at a steady real-world rate <em>whether or not</em> the previous ones have crossed — now you see the jam form. Good load tests keep the pressure constant, exactly like real users who keep tapping regardless of how the server feels.</p></div>
+  <div class="gotcha"><span class="t">COMMON MISUNDERSTANDING</span>
+  <p>"We can handle 100,000 requests per second" sounds like a finish line. It isn't, by itself. The honest question is: <em>at what point does the unlucky-user experience start getting bad?</em> A system that does 100,000 fast requests then falls off a cliff is worse than one that does 80,000 and stays smooth. You aim to run at maybe 70–80% of the breaking point, leaving room for surprise crowds — just as you don't drive with the fuel needle on empty even though the car still moves.</p></div>
+</section>
+<div class="divider"></div>
+
+<!-- ============ CH 4 ============ -->
+<section id="c4">
+  <span class="chip">CHAPTER 4</span>
+  <h2>Rate limiting: politely saying "that's enough"</h2>
+  <p><strong>Rate limiting</strong> means capping how many requests someone can make in a given time. Too many, too fast, and the extra ones get turned away (usually with a "try again shortly" message). This protects the system from being swamped — whether by an attacker or just by a buggy app stuck in a loop.</p>
+
+  <h3>Two flavors, for two different goals</h3>
+  <p>There are a few ways to count, and which you pick depends on <em>what you're protecting</em>. Two are worth understanding:</p>
+  <table>
+    <tr><th>Name</th><th>How to picture it</th><th>Good for</th></tr>
+    <tr><td><strong>Leaky bucket</strong></td><td>A bucket with a small hole. Requests pour in the top; they drain out the bottom at a steady, fixed rate. Pour too fast and the bucket overflows — those requests are rejected. The output is always smooth.</td><td>Protecting a delicate service that hates sudden spikes. It smooths bursts into a steady trickle.</td></tr>
+    <tr><td><strong>Token bucket</strong></td><td>A bucket that slowly fills with tokens (say, one every second, up to 20). Each request spends one token. Idle for a while? You've saved up tokens and can do a quick burst. Empty? You wait.</td><td>Customer allowances, where a short burst after a quiet period is perfectly reasonable.</td></tr>
+  </table>
+  <div class="why"><span class="t">WHY TWO DIFFERENT ONES — ISN'T ONE "BETTER"?</span>
+  <p>Neither is better; they express different promises. If you're shielding a fragile back-room service, you want the <em>leaky bucket</em> — no matter how choppy the incoming crowd, the service downstream feels a calm, even flow. If instead you're giving a paying customer a fair allowance, the <em>token bucket</em> is fairer: someone who was quiet all morning shouldn't be punished for sending twenty requests at noon. Same tool, opposite intentions. The skill is naming the promise first, then picking the counter that keeps it.</p></div>
+  <div class="eg"><span class="t">TWO EVERYDAY EXAMPLES</span>
+  <p><strong>Leaky bucket:</strong> a nightclub with a strict "one person through the door every few seconds" policy, no matter how big the crowd outside. The dance floor inside stays comfortable because entry is smoothed.</p>
+  <p><strong>Token bucket:</strong> a phone plan with "rollover minutes." Didn't call much this month? You've banked some minutes and can talk for a long stretch. Used them all? You wait for next month. It rewards saving up, then allows a burst.</p></div>
+
+  <h3>The hard part: counting across many computers</h3>
+  <p>Here's a puzzle that trips up almost everyone. You want to limit each visitor to, say, 100 requests per minute. Easy on one computer — just keep a tally. But remember from Chapter 1: there isn't one computer. There are 200. A visitor's requests get spread across all of them by the traffic officer. If each of the 200 computers keeps its own tally of "100 allowed," the visitor can actually make 200 × 100 = 20,000 requests. Oops.</p>
+  <figure>
+  <svg viewBox="0 0 800 200" role="img" aria-label="One shared counter is slow; local counters plus occasional syncing is the balance">
+    <g font-size="12" fill="#22303A">
+      <text x="200" y="22" text-anchor="middle" font-weight="bold">Idea A: one shared tally</text>
+      <rect x="60" y="40" width="80" height="40" rx="6" fill="#fff" stroke="#22303A"/><text x="100" y="65" text-anchor="middle" font-size="11">computer</text>
+      <rect x="260" y="40" width="80" height="40" rx="6" fill="#fff" stroke="#22303A"/><text x="300" y="65" text-anchor="middle" font-size="11">computer</text>
+      <rect x="150" y="120" width="100" height="42" rx="6" fill="#FBEFEC" stroke="#B5493A"/><text x="200" y="146" text-anchor="middle" font-size="11" fill="#B5493A">shared tally</text>
+      <line class="flow" x1="100" y1="80" x2="185" y2="118" stroke="#B5493A" stroke-width="1.6"/>
+      <line class="flow" x1="300" y1="80" x2="215" y2="118" stroke="#B5493A" stroke-width="1.6"/>
+      <text x="200" y="185" text-anchor="middle" font-size="10.5" fill="#B5493A">correct, but every request waits for the trip → slow</text>
+      <text x="600" y="22" text-anchor="middle" font-weight="bold">Idea B: local tally + occasional sync ✓</text>
+      <rect x="460" y="40" width="80" height="40" rx="6" fill="#EAF5EE" stroke="#1B7A46"/><text x="500" y="59" text-anchor="middle" font-size="10">local</text><text x="500" y="72" text-anchor="middle" font-size="10">tally</text>
+      <rect x="660" y="40" width="80" height="40" rx="6" fill="#EAF5EE" stroke="#1B7A46"/><text x="700" y="59" text-anchor="middle" font-size="10">local</text><text x="700" y="72" text-anchor="middle" font-size="10">tally</text>
+      <rect x="560" y="120" width="90" height="42" rx="6" fill="#fff" stroke="#5C6B75" stroke-dasharray="4 3"/><text x="605" y="141" text-anchor="middle" font-size="10">compare notes</text><text x="605" y="154" text-anchor="middle" font-size="9" fill="#5C6B75">every ~0.1s</text>
+      <line class="flow" x1="500" y1="80" x2="580" y2="118" stroke="#5C6B75" stroke-width="1.4"/>
+      <line class="flow" x1="700" y1="80" x2="630" y2="118" stroke="#5C6B75" stroke-width="1.4"/>
+      <text x="600" y="185" text-anchor="middle" font-size="10.5" fill="#1B7A46">fast (no waiting) and fair enough</text>
+    </g>
+  </svg>
+  <figcaption>The everyday tension: perfectly correct counting is slow; fast counting is slightly loose. Real systems pick fast-and-close.</figcaption>
+  </figure>
+  <div class="why"><span class="t">WHY NOT JUST USE ONE SHARED TALLY (THE "CORRECT" ANSWER)?</span>
+  <p>Because a shared tally lives on <em>one</em> computer, and every one of the 200 computers would have to send a message to it — and wait for the reply — <strong>on every single request</strong>. That round-trip takes a tiny moment, but "tiny × millions of times a second" becomes a giant traffic jam, and if that one tally-computer hiccups, everything freezes. So real systems do something cleverer: each computer keeps its own local tally (say, its fair share of the limit) and the computers <em>compare notes every fraction of a second</em> in the background. The count is briefly a little off, but it's fast and never has a single fragile bottleneck.</p>
+  <p>The mindset to take away: rate limiting is about <em>protecting the system</em>, not about billing someone to the exact penny. "Roughly right, instantly" beats "exactly right, slowly." (The one exception is when real money is attached — then you pay for exactness.)</p></div>
+  <div class="gotcha"><span class="t">COMMON MISUNDERSTANDING</span>
+  <p>People assume the goal is a perfectly precise count. For protection, precision is the <em>wrong</em> goal — chasing it makes the system slow and fragile, which is the very disaster you were trying to prevent. Being approximately right, immediately, is the professional answer.</p></div>
+</section>
+<div class="divider"></div>
+
+<!-- ============ CH 5 ============ -->
+<section id="c5">
+  <span class="chip">CHAPTER 5</span>
+  <h2>"Who are you?" — checking identity</h2>
+  <p>Before a system does something for you — show your messages, charge your card — it needs to know it's really you. This is <strong>authentication</strong> (proving who you are). The challenge at large scale: how do you check millions of people per minute without a slow lookup every time?</p>
+
+  <h3>The ID card that carries its own proof: the JWT</h3>
+  <p>The clever trick is a <strong>JWT</strong> (<span class="ab" title="JSON Web Token = a small signed digital ID card carried with each request">JSON Web Token</span> — just call it a "signed ID card"). When you log in, the login service hands you a small digital card that says who you are and what you may do, and it <em>signs</em> that card with a special seal that's impossible to forge but easy for anyone to verify.</p>
+  <div class="eg"><span class="t">EVERYDAY EXAMPLE</span>
+  <p>Think of a festival wristband with a tamper-proof hologram. The gate staff don't phone head office every time you walk between stages — they just glance at the hologram. Genuine? In you go. The proof travels <em>on your wrist</em>. A JWT is that wristband: the server checks the seal in a fraction of a moment, with no phone call to a database.</p>
+  <p>Second example: a signed permission slip a parent gives a child for a school trip. Any teacher can recognize the parent's signature; they don't need to call the parent each time. The signature <em>is</em> the proof, carried in hand.</p></div>
+  <div class="why"><span class="t">WHY A SELF-PROVING CARD INSTEAD OF LOOKING YOU UP EACH TIME?</span>
+  <p>Looking someone up in a central list means every request waits for that list, and the list becomes a bottleneck and a single point of failure — the Chapter 4 problem again. A self-proving card removes the lookup entirely: the server verifies the seal using math, touching no database. The trade-off is honest: you can't instantly cancel a card that's already out there — it stays valid until it expires. So these cards are made <strong>short-lived</strong> (they expire in minutes), and for emergencies (a stolen card) there's a small "banned list" to check against. Fast for everyone normal; still cancelable when it counts.</p></div>
+
+  <h3>When the "who are you" check is complicated</h3>
+  <p>Sometimes "are you allowed?" is more than checking a seal — maybe it depends on your team, the time of day, your subscription. In that case the receptionist (Nginx, or its cousin Envoy in Chapter 8) can quietly ask a dedicated "permissions desk" a yes/no question before letting the request through, and remember the answer briefly so it doesn't have to ask again for a few seconds.</p>
+  <div class="eg"><span class="t">EVERYDAY EXAMPLE</span>
+  <p>A bouncer with a guest list they mostly know by heart, but for tricky cases they radio the manager: "Is this person on the VIP list tonight?" They get a yes/no and remember it for the next few minutes so they're not radioing constantly.</p></div>
+
+  <h3>Machines proving themselves to each other</h3>
+  <p>Humans use passwords and ID cards. But inside a data center, <em>programs</em> talk to other programs constantly, and they need to prove their identity too. They don't use passwords (a password sitting in a program's settings is easy to steal). Instead they use <strong>certificates</strong> — digital passports — and both sides show them. That two-sided passport check is <strong>mTLS</strong>, and it gets its own chapter (Chapter 9) because it's central to modern security.</p>
+  <div class="gotcha"><span class="t">COMMON MISUNDERSTANDING</span>
+  <p>People assume "logged in" is checked once and then you're trusted forever. Modern systems don't work that way anymore — partly because a laptop can be stolen <em>after</em> login. That's why cards expire quickly and why there are ways to cancel access mid-session (we'll meet that idea, called Continuous Access Evaluation, in Chapter 10). "Trust, but keep re-checking" is the modern rule.</p></div>
+</section>
+<div class="divider"></div>
+
+<!-- ============ CH 6 ============ -->
+<section id="c6">
+  <span class="chip">CHAPTER 6</span>
+  <h2>Throwing away the bad traffic — cheaply</h2>
+  <p>At a busy website, a large share of incoming traffic is junk: automated scanners, break-in attempts, bots pretending to be people. The whole art of security-at-scale is <strong>making each piece of bad traffic cost you almost nothing to reject</strong>, while it costs the attacker real effort to send. Let's build up the tricks.</p>
+
+  <h3>The core idea: cheapest check first</h3>
+  <p>Line up your checks from cheapest to most expensive, and reject as early as possible. A request that's obviously bad should die at the very first, near-free check — it should never reach the expensive checks deep inside.</p>
+  <div class="eg"><span class="t">EVERYDAY EXAMPLE</span>
+  <p>Airport security is layered this way on purpose. A quick glance at your boarding pass (cheap) happens before the metal detector (moderate) before a full bag search (expensive). You don't give everyone a full bag search — you'd need a thousand staff and the line would never move. You filter down step by step, so the costly checks only ever face the few who got past the cheap ones.</p></div>
+
+  <h3>A beautiful trick: the Bloom filter</h3>
+  <p>Here's a real gem, and it's simpler than its scary name. Suppose you have a blocklist of 10 million known-bad addresses, and you need to check every incoming visitor against it — millions of times a second. Storing 10 million full addresses and searching them is slow and memory-hungry. A <strong>Bloom filter</strong> is a tiny structure that answers one specific question incredibly fast: <em>"Is this address definitely NOT on the list, or MIGHT it be on the list?"</em></p>
+  <div class="plain"><span class="t">THE KEY TO UNDERSTANDING IT</span>
+  <p>A Bloom filter gives one of two answers, and the wording matters:<br>
+  → <strong>"Definitely not on the list"</strong> — you can trust this completely. Let them through.<br>
+  → <strong>"Might be on the list"</strong> — usually right, but occasionally a false alarm. So for just these, you do one proper, exact check to be sure.</p>
+  <p>It never makes the dangerous mistake (saying "not on the list" about someone who <em>is</em>). It only ever makes the safe mistake (a rare false alarm, which the follow-up check catches).</p></div>
+  <div class="eg"><span class="t">AN EVERYDAY WAY TO PICTURE IT</span>
+  <p>Imagine a nightclub bouncer who, instead of carrying photos of 10,000 banned troublemakers, has memorized a few rough features of each: "banned people tend to have some combination of these hat/jacket/shoe styles." When you arrive, they glance at your features. If you match <em>none</em> of the banned patterns, you're <strong>definitely</strong> not banned — walk in, no delay. If you happen to match the patterns, you <em>might</em> be banned (or you might just be an innocent person who dresses similarly) — so they do a quick proper ID check just for you. Most innocent people breeze through instantly; only the rare look-alike gets the extra check; and no truly banned person slips by. That's a Bloom filter: enormous memory savings, instant answers, and the only errors it makes are harmless false alarms.</p>
+  <p>The payoff in numbers: checking 10 million bad addresses this way needs only about <strong>12 megabytes</strong> of memory — smaller than a single photo — instead of the roughly one <em>gigabyte</em> (about 80 times more) a full list would need. And each check is a handful of instant peeks, not a search.</p></div>
+  <div class="why"><span class="t">WHY ACCEPT ANY FALSE ALARMS AT ALL?</span>
+  <p>Because of <em>which</em> mistake it makes. A false alarm ("might be bad") just triggers one extra proper check on an innocent person — a tiny, one-time cost, and they still get through. The <em>opposite</em> mistake — waving through someone who's actually banned — never happens with a Bloom filter. When you must choose which direction to be occasionally wrong, "harmless extra check" beats "let the bad guy in" every time. That's why this tool fits security so well.</p></div>
+
+  <h3>Spotting suspicious behavior (not just known-bad lists)</h3>
+  <p>Blocklists only catch <em>known</em> bad actors. To catch new ones, systems watch <em>behavior</em>. Real people are irregular — they pause, they scroll, they think. Bots are often mechanical — perfectly evenly timed, hammering the same door, poking at pages that don't exist. Systems also look at subtle technical "fingerprints" that are hard to fake: a request might <em>claim</em> to come from a normal phone browser, but the technical way it shakes hands reveals it's actually an automated script. Faking the label is free; faking the deep fingerprint is expensive — so the fingerprint is the better tell.</p>
+  <div class="why"><span class="t">WHY NOT JUST INSTANTLY BAN ANYONE SUSPICIOUS?</span>
+  <p>Three reasons a beginner can appreciate. <strong>One:</strong> thousands of innocent people can share a single address (everyone on a university's or a phone carrier's network looks like one address) — ban it and you've locked out a whole campus. <strong>Two:</strong> a hard block <em>tells the attacker</em> exactly when they were detected, so they simply adjust and try again; a quiet slowdown wastes their time without teaching them anything. <strong>Three:</strong> the "suspicious but allowed with extra friction" cases give you evidence to learn from. So good systems escalate gently — full speed → slight slowdown → puzzle challenge → block — rather than swinging the ban hammer first.</p></div>
+  <div class="gotcha"><span class="t">COMMON MISUNDERSTANDING</span>
+  <p>Security at scale isn't mainly about clever detection of evil — it's about <em>economics</em>. You win by making bad traffic cheap for you to discard and expensive for them to send. A defense that's clever but costly to run loses, because the attacker just sends more until your cleverness bankrupts you.</p></div>
+</section>
+<div class="divider"></div>
+
+<!-- ============ CH 7 ============ -->
+<section id="c7">
+  <span class="chip">CHAPTER 7</span>
+  <h2>Kubernetes: the automatic operations manager</h2>
+  <p>We keep saying "there are hundreds of computers." <em>Something</em> has to manage them — start programs, restart crashed ones, spread the load, replace dead machines. Doing that by hand for hundreds of computers is impossible. <strong>Kubernetes</strong> (shortened to <strong>K8s</strong> — the 8 stands for the eight letters between K and s) is the software that does it automatically.</p>
+
+  <h3>The one idea underneath all of Kubernetes</h3>
+  <p>Almost everything Kubernetes does comes from a single, simple loop it runs forever:</p>
+  <div class="plain"><span class="t">THE WHOLE PHILOSOPHY IN ONE SENTENCE</span>
+  <p>You describe the <strong>result you want</strong> ("I want 3 copies of my app running at all times"), and Kubernetes constantly compares <em>what you asked for</em> against <em>what's actually happening</em>, and quietly fixes any difference — forever.</p></div>
+  <div class="eg"><span class="t">EVERYDAY EXAMPLE</span>
+  <p>A thermostat. You don't command the furnace on and off. You set "I want 21°C," and the thermostat endlessly compares the wanted temperature to the real temperature and acts to close the gap. Kubernetes is a thermostat for running software: you set "3 copies," and if one crashes (now there are 2), it notices the gap and starts a replacement — without you waking up.</p>
+  <p>Second example: a fish-tank auto-topup that keeps the water at a marked line. Water evaporates (reality drifts below the line), the device adds water (reality pushed back to the wanted line). It never needs step-by-step instructions — just the target line and the will to keep matching it.</p></div>
+  <div class="why"><span class="t">WHY "DESCRIBE THE RESULT" INSTEAD OF "GIVE STEP-BY-STEP ORDERS"?</span>
+  <p>Because in a huge system, things fail constantly and messages get lost. If you managed by barking one-time orders ("start a copy on computer #47!"), then any order that got lost would leave things permanently wrong, and you'd have to personally notice and re-send it. By instead stating the <em>desired end result</em> and re-checking forever, the system self-heals: even if it misses something once, the next check catches the gap and fixes it. It's the difference between "I told you once" and "I keep making sure." At scale, only "keep making sure" survives.</p></div>
+
+  <h3>A few Kubernetes words you'll hear</h3>
+  <table>
+    <tr><th>Word</th><th>Plain meaning</th></tr>
+    <tr><td><strong>Pod</strong></td><td>The smallest unit Kubernetes runs — think "one running copy of your app, in its own little bubble." Usually one app plus small helpers.</td></tr>
+    <tr><td><strong>Node</strong></td><td>One of the actual computers in the fleet. A node runs many pods.</td></tr>
+    <tr><td><strong>Service</strong></td><td>A stable "front desk name" for your app. Pods come and go (they crash, they multiply), but the Service name always points to whichever pods are currently alive.</td></tr>
+    <tr><td><strong>Controller</strong></td><td>One of the little thermostat-loops. There's one watching your app copies, one watching the computers, and so on — each fixing its own kind of gap.</td></tr>
+  </table>
+
+  <h3>The disappearing load balancer</h3>
+  <p>Here's something that surprises newcomers. That "front desk name" (the <strong>Service</strong>) sounds like it must be a machine — a receptionist you send requests to. It isn't. There's no receptionist computer. Instead, Kubernetes teaches <em>every computer in the fleet</em> the rule: "when someone wants the payments app, here are the addresses of the live payment pods — pick one." The choosing happens right on the sending computer. The "front desk" is a shared rule, not a place.</p>
+  <div class="eg"><span class="t">EVERYDAY EXAMPLE</span>
+  <p>It's like everyone in an office memorizing "for IT help, knock on whichever of rooms 3, 5, or 8 has its light on," instead of routing all IT requests through one overworked front-desk person. No single point to overwhelm; the "routing" lives in everyone's shared knowledge.</p></div>
+  <div class="gotcha"><span class="t">A REAL GOTCHA WORTH KNOWING</span>
+  <p>This choosing happens once, when a <em>connection</em> opens, and then all messages on that connection go to the same pod. For normal web traffic that's fine. But some apps open one long-lived connection and pour thousands of requests down it — and then <em>one</em> pod gets all of them while the others sit idle. It looks like the load balancing "broke," but it didn't; it just works per-connection, and that app used one connection for everything. The fix is a smarter helper that balances per-<em>request</em> — which is exactly what the sidecar in the next chapter provides. (Don't worry about the details; just remember: "one hot pod, everyone else idle" usually means this.)</p></div>
+
+  <h3>How outside traffic gets in</h3>
+  <p>From Chapter 1, your request arrived at the data center and hit the traffic officer. To get from there to the right app inside Kubernetes, it passes through a special entry-point pod (often running Nginx itself, or its cousin Envoy) that looks at what you're asking for and routes you to the correct Service. So the Nginx you learned about in Chapters 2–6 is frequently the doorway <em>into</em> the Kubernetes world. It all connects.</p>
+</section>
+<div class="divider"></div>
+
+<!-- ============ CH 8 ============ -->
+<section id="c8">
+  <span class="chip">CHAPTER 8</span>
+  <h2>The sidecar: a networking helper that rides along</h2>
+  <p>Every app needs the same networking chores done: encrypt its connections, retry when something fails briefly, keep statistics, enforce rules. You <em>could</em> program all of that into every single app — but you have apps written in five different languages by twelve different teams, and you'd have to build and maintain the same features five times over, and beg every team to update. Painful.</p>
+
+  <h3>The idea: put a little helper next to each app</h3>
+  <p>Instead, you place a small, standard networking program right next to each running app, in the same bubble (the same pod). All of the app's incoming and outgoing traffic is quietly routed through this helper first. The helper handles the chores; the app doesn't even know it's there. This helper is the <strong>sidecar</strong>, and the most popular one is called <strong>Envoy</strong>.</p>
+  <div class="eg"><span class="t">EVERYDAY EXAMPLE</span>
+  <p>Picture a motorcycle sidecar — the little attached seat. The motorcycle (your app) just drives. The sidecar passenger handles the map, the tolls, the phone calls, the paperwork. The driver focuses on driving; the passenger handles everything else. Now imagine <em>every</em> motorcycle in the city gets an identical, expert passenger — suddenly the whole city's tolls, maps, and paperwork are handled consistently, without retraining a single driver. That's a service mesh: every app gets the same expert networking passenger.</p>
+  <p>Second example: a personal interpreter who shadows you at an international conference. You speak normally; they handle translation, etiquette, and note-taking in every conversation. You don't learn twelve languages — you just bring the interpreter everywhere. The sidecar is that interpreter for your app's network conversations.</p></div>
+  <div class="why"><span class="t">WHY A SEPARATE HELPER INSTEAD OF BUILDING IT INTO EACH APP?</span>
+  <p>Because it turns "twelve teams each re-implementing security and retries in their own language, and you hoping they all did it right" into "one well-tested helper, configured centrally, applied identically to everyone." Want to upgrade how encryption works everywhere? Update the helper, not twelve codebases on twelve schedules. It's the difference between teaching every employee first aid versus stationing one trained medic beside each — the medic is consistent, updatable, and doesn't depend on everyone remembering their training.</p></div>
+
+  <h3>Nginx or Envoy — which, and why both exist</h3>
+  <p>You might wonder why we need Envoy if we already have Nginx. They're cousins doing similar work, but they shine in different spots:</p>
+  <ul>
+    <li><strong>Nginx</strong> is a veteran at the <em>front door</em> — the edge where the public internet comes in. Mature, battle-tested, superb at serving files and being the doorway.</li>
+    <li><strong>Envoy</strong> is built for the <em>chaos inside</em> — where pods appear and vanish every few seconds. Its special talent is accepting new instructions <em>live</em>, on the fly, without restarting, thousands of times an hour. That constant reconfiguration is exactly what a busy Kubernetes cluster needs internally, and it's why Envoy became the standard sidecar.</li>
+  </ul>
+  <div class="eg"><span class="t">EVERYDAY EXAMPLE</span>
+  <p>Nginx is the seasoned doorman at the building's main entrance — calm, reliable, handles the public. Envoy is the nimble internal courier who reroutes constantly as people change desks all day long. Same profession (moving things to the right place), different environments. Many companies use both: Nginx at the entrance, Envoy inside.</p></div>
+</section>
+<div class="divider"></div>
+
+<!-- ============ CH 9 ============ -->
+<section id="c9">
+  <span class="chip">CHAPTER 9</span>
+  <h2>mTLS: both sides show their passport</h2>
+  <p>We've mentioned this a few times; now let's make it clear and simple. Start with ordinary secure browsing, then add the twist.</p>
+
+  <h3>Ordinary secure browsing (one-sided)</h3>
+  <p>When you visit a site with the padlock icon, that's <strong>TLS</strong> (<span class="ab" title="Transport Layer Security = the technology that encrypts web connections">Transport Layer Security</span>) doing two jobs: it <em>scrambles</em> the conversation so eavesdroppers can't read it, and it lets the <em>website prove it's really itself</em> (so you're not talking to an impostor). Notice: the website proves itself to you, but you don't prove yourself to the website this way. It's one-sided — like a shop showing you its business license while you stay anonymous.</p>
+  <p>The website proves itself using a <strong>certificate</strong> — a digital passport issued by a trusted <strong>CA</strong> (<span class="ab" title="Certificate Authority = a trusted passport office for the internet">Certificate Authority</span>, a trusted "passport office"). Your browser trusts a handful of these passport offices, so it trusts passports they've stamped.</p>
+
+  <h3>The twist: make it two-sided (mutual)</h3>
+  <p><strong>mTLS</strong> (<span class="ab" title="mutual TLS = both sides prove their identity with certificates">mutual TLS</span>) simply adds the missing half: <em>both</em> sides show their passport. The website proves itself to the visitor <em>and</em> the visitor proves itself to the website. Both are certain who they're talking to.</p>
+  <div class="eg"><span class="t">EVERYDAY EXAMPLE</span>
+  <p>Ordinary TLS is a delivery driver showing you their company badge before you open the door — you know it's a real courier, but they don't verify you. mTLS is <em>both</em> of you showing ID: the courier confirms they're delivering to the right person, and you confirm they're the real courier. Two passports, mutual certainty. Useful when both sides need to be sure — which is exactly the situation for programs handing each other sensitive data inside a data center.</p></div>
+  <div class="why"><span class="t">WHY DO MACHINES USE THIS, BUT HUMANS USUALLY DON'T?</span>
+  <p>Managing certificates (getting them, renewing them, revoking stolen ones) is fiddly — miserable to expect of ordinary people across all their devices. So humans get passwords and phone codes instead. But <em>programs</em> are the opposite: they're terrible at safely keeping a password (it tends to sit in a settings file where a thief can grab it), yet the platform can automatically issue, install, and refresh certificates for them behind the scenes. So the rule is: match the ID method to who can manage it. Machines → certificates (mTLS). Humans → passwords + codes.</p></div>
+
+  <h3>Two details that make it modern and safe</h3>
+  <ul>
+    <li><strong>Identity by name, not by address.</strong> Inside Kubernetes, pods are born and die constantly and their addresses get recycled — today's address for the payments app might be tomorrow's address for something else. So security rules are written against the <em>certificate's identity</em> ("the payments service"), never against a changeable address. It's like recognizing a person by their verified name, not by "whoever's sitting in seat 14 today."</li>
+    <li><strong>Passports that expire in a day and renew themselves.</strong> Instead of long-lived certificates plus a complicated system to cancel stolen ones, the mesh gives each program a certificate that lasts only about a day and quietly renews it. If a program should lose access, you simply stop renewing — and within a day its passport is dead. Short life turns "cancel a stolen pass" (hard) into "just stop reissuing" (easy).</li>
+  </ul>
+  <div class="gotcha"><span class="t">COMMON MISUNDERSTANDING</span>
+  <p>Showing a certificate doesn't, by itself, prove anything — certificates aren't secret; anyone can wave a copy. The real proof is that each side also performs a secret mathematical signature that <em>only the true owner could produce</em>, tied to this specific conversation so it can't be copied and replayed later. Think of it as not just showing the passport, but also signing a fresh document in front of the officer, in handwriting only you can produce. The signature, not the passport photo, is the proof.</p></div>
+</section>
+<div class="divider"></div>
+
+<!-- ============ CH 10 ============ -->
+<section id="c10">
+  <span class="chip">CHAPTER 10</span>
+  <h2>The AI gateway: watching traffic that was built to be unwatchable</h2>
+  <p>This is the newest and, for your purposes, the most important chapter — but it's just the earlier ideas rearranged, so you already have the pieces. The setting flips around: now the concern isn't strangers coming <em>in</em>, it's your own company's employees and their AI tools reaching <em>out</em> to the wider internet, and needing to make sure nothing sensitive leaks out and nothing dangerous comes back.</p>
+
+  <h3>The catch: the traffic is sealed</h3>
+  <p>Remember, secure connections are scrambled so nobody in the middle can read them — that's the whole point of the padlock. But a company that must prevent leaks needs to <em>look inside</em> its own employees' work traffic. How can it look inside something specifically designed to be unreadable in transit?</p>
+  <p>The answer is a <strong>gateway</strong> that sits in the middle <em>with permission</em>, and does something subtle: it unlocks the conversation, inspects it, and re-locks it before sending it on. Crucially, this only works because the company has installed its own trusted "passport office" onto its own managed work devices ahead of time — using <strong>MDM</strong> (<span class="ab" title="Mobile Device Management = company software on work devices that lets IT configure them">Mobile Device Management</span>, the software IT puts on work laptops). On a personal device without that arrangement, the trick correctly fails and the browser warns you — as it should.</p>
+  <div class="eg"><span class="t">EVERYDAY EXAMPLE</span>
+  <p>Think of a company mailroom that, per company policy everyone agreed to, opens outgoing work packages, checks nothing confidential is being shipped out, reseals them, and sends them on. It only has the authority to do this for <em>company</em> mail on <em>company</em> premises — it can't open your personal letters from home. The gateway is that mailroom for encrypted internet traffic: it can inspect because the devices were set up, with consent, to allow it.</p></div>
+
+  <h3>Inspecting the contents — cheap check, then smart check</h3>
+  <p>Once the gateway can read the content, how does it scan for problems fast enough? With the same "cheapest check first" wisdom from Chapter 6, in two stages:</p>
+  <ul>
+    <li><strong>Stage one — the fast pattern scan.</strong> A lightning-fast method reads the text once and simultaneously checks it against thousands of known bad patterns at the same time (leaked passwords, credit-card shapes, forbidden phrases). This uses a clever technique whose only job is to be extremely fast and catch obvious matches. It runs on <em>everything</em>.</li>
+    <li><strong>Stage two — the smart scan.</strong> The obvious stuff is caught by stage one. To catch clever, reworded, or novel problems, a slower <strong>ML</strong> (<span class="ab" title="Machine Learning = software that learns patterns from examples">Machine Learning</span>) model — one that understands meaning, not just exact matches — takes a closer look. But because it's expensive, it only examines the small fraction of traffic that stage one flagged as worth a second look.</li>
+  </ul>
+  <div class="eg"><span class="t">EVERYDAY EXAMPLE</span>
+  <p>A customs process: a quick X-ray scanner (fast, automatic, checks every bag) followed by a human expert who hand-inspects only the few bags the scanner flagged. You'd never have the expert open every bag — the line would stretch for miles. Fast-filter-then-expert is how you inspect a flood without drowning.</p></div>
+
+  <h3>The new wrinkle: the "user" is now often a robot</h3>
+  <p>Modern AI "agents" — programs that act on your behalf, doing many steps automatically — behave very differently from a human. A person clicks a few times a minute, pauses, thinks. An agent can fire off hundreds of requests in a burst and run all night. So a gateway must tell agents apart from humans and handle them differently — for instance, giving each agent its own limited, purpose-specific permission rather than letting it borrow a human's full powers.</p>
+  <div class="why"><span class="t">WHY NOT JUST LET THE AGENT USE THE PERSON'S LOGIN?</span>
+  <p>Because an AI agent can be tricked (fed sneaky instructions hidden in the content it reads), and if it's carrying a human's <em>full</em> powers when that happens, the damage is huge and — worse — the logs can't tell whether the human or the runaway agent did it. Instead, the agent gets a <em>narrow</em> pass: "you may read email, for the next few minutes, on behalf of this person, and nothing else." If it goes haywire, the blast is contained by design. It's the difference between handing a contractor your master key versus a single-door key that works for one hour.</p></div>
+
+  <h3>Canceling access the moment things change (CAE)</h3>
+  <p>Finally, one more idea you'll want to name. Normally a pass stays valid until it expires. But sometimes you need to cut access <em>right now</em> — someone's laptop is stolen, or they've just left the company. <strong>CAE</strong> (<span class="ab" title="Continuous Access Evaluation = instantly canceling access when something changes, rather than waiting for a pass to expire">Continuous Access Evaluation</span>) is the mechanism that pushes an immediate "this person is cut off, effective now" signal to everything, instead of waiting for their pass to run out.</p>
+  <div class="eg"><span class="t">EVERYDAY EXAMPLE</span>
+  <p>Hotel key cards. Normally your card just works until checkout. But if a card is reported stolen, the front desk can deactivate it <em>instantly</em> at every door — they don't wait for it to expire on its own. CAE is that instant, building-wide deactivation for digital access.</p></div>
+  <div class="plain"><span class="t">THE ONE PATTERN BEHIND THIS WHOLE CHAPTER (AND DOCUMENT)</span>
+  <p>Notice the same shape keeps returning: <strong>a cheap, fast default action for the common case, and an expensive, careful action reserved only for when something signals it's needed.</strong> Fast pattern-scan then smart scan. Instant "definitely fine" from the Bloom filter, exact check only for maybes. Local rate tallies, occasional syncing. Passes that expire, plus an emergency cancel. Once you see this pattern, the entire field stops feeling like a hundred separate tricks and becomes one idea applied over and over.</p></div>
+</section>
+<div class="divider"></div>
+
+<!-- ============ CH 11 ============ -->
+<section id="c11">
+  <span class="chip">CHAPTER 11</span>
+  <h2>The whole story, in one breath</h2>
+  <p>Let's retrace the entire journey now that you have every piece. Read this slowly; if any line feels unclear, that's the chapter to revisit.</p>
+  <ol>
+    <li>You tap refresh. The <strong>phone book (DNS)</strong> turns the website's name into a numeric address. <em>(Ch. 1)</em></li>
+    <li>The <strong>nearest-building trick (Anycast)</strong> sends your message to the closest data center, which also spreads out attacks. <em>(Ch. 1)</em></li>
+    <li>A <strong>traffic officer (load balancer)</strong> hands your message to one of hundreds of worker computers. <em>(Ch. 1)</em></li>
+    <li>On that worker, <strong>Nginx</strong> — the tireless receptionist who serves thousands at once by never waiting idly — receives you. <em>(Ch. 2)</em></li>
+    <li>It works to stay fast, mostly by <strong>reusing connections</strong> so it isn't constantly re-doing the expensive handshake; and its performance is judged by the <strong>unlucky-user number (p99)</strong>, not the flattering average. <em>(Ch. 3)</em></li>
+    <li>It caps overuse with <strong>rate limiting</strong>, counting locally on each computer and syncing occasionally rather than through one slow shared tally. <em>(Ch. 4)</em></li>
+    <li>It checks who you are with a <strong>self-proving ID card (JWT)</strong> — no slow database lookup per request. <em>(Ch. 5)</em></li>
+    <li>It sheds junk traffic cheaply — cheapest check first, with a <strong>Bloom filter</strong> giving instant "definitely fine / maybe bad" verdicts and only the "maybes" paying for a real check. <em>(Ch. 6)</em></li>
+    <li>All these worker computers are managed automatically by <strong>Kubernetes</strong>, the thermostat-like manager that keeps reality matching what you asked for. <em>(Ch. 7)</em></li>
+    <li>Inside, each app has a <strong>sidecar helper (Envoy)</strong> handling its networking chores identically for every team. <em>(Ch. 8)</em></li>
+    <li>Programs prove themselves to each other with two-sided passports, <strong>mTLS</strong>, using short-lived auto-renewing certificates and name-based identity. <em>(Ch. 9)</em></li>
+    <li>And when the concern is traffic going <em>out</em> — especially from AI tools — an <strong>AI gateway</strong> inspects it (cheap scan then smart scan), treats robot-agents differently from humans, and can cancel access instantly with <strong>CAE</strong>. <em>(Ch. 10)</em></li>
+  </ol>
+  <div class="plain"><span class="t">IF YOU REMEMBER ONLY THREE THINGS</span>
+  <p><strong>1. Don't pay to wait.</strong> Nginx's whole genius is handling thousands of people by only ever doing active work, never sitting idle. Half the tricks in this document are variations of "avoid needless waiting or needless work."</p>
+  <p><strong>2. Cheap first, expensive only when signaled.</strong> Bloom filters, two-stage inspection, layered security, local-then-synced counting — all the same idea. A near-free default, an expensive check held in reserve.</p>
+  <p><strong>3. There is no single "the server."</strong> There's a self-healing fleet of hundreds of interchangeable computers, with layers of cleverness working to make it feel like one fast, reliable place.</p></div>
+  <p style="margin-top:20px;color:var(--soft)">That's the whole system. Not a hundred unrelated technologies — one sensible response to a few hard facts: the internet is big, computers fail, strangers are hostile, and waiting is expensive. Every tool here is a reasonable answer to one of those facts. Now the dense field manual will read very differently — you'll recognize the plain idea hiding inside each piece of jargon.</p>
+</section>
+
+</main>
+<footer>
+  <div class="wrap">The Plain English Edition · a companion to the full field manual · read this first, then the manual makes sense · every abbreviation spelled out, every idea given an everyday twin.</div>
+</footer>
+</body>
+</html>

@@ -1,0 +1,1551 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Nginx → Envoy → Kubernetes: Billion-Request Gateway Internals</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=IBM+Plex+Sans:wght@400;600&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#F4F7F3; --ink:#101B14; --card:#FFFFFF;
+  --nginx:#009639; --nginx-dark:#00662A;
+  --k8s:#326CE5; --k8s-dark:#1F4CB0;
+  --alert:#C43D3D; --amber:#B07A18; --amber-bg:#FCF4E3;
+  --dim:#5A6A5F; --line:#D8E0D8;
+  --term-bg:#0C1510; --term-fg:#C9E8CF; --term-green:#4ADE80; --term-blue:#7DB8FF; --term-dim:#6E8577;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{
+  font-family:'IBM Plex Sans',sans-serif; color:var(--ink); background:var(--paper);
+  background-image:linear-gradient(var(--line) 1px, transparent 1px),linear-gradient(90deg, var(--line) 1px, transparent 1px);
+  background-size:28px 28px; background-attachment:fixed; line-height:1.62; font-size:16px;
+}
+.wrap{max-width:960px;margin:0 auto;padding:0 20px}
+/* ---- hero ---- */
+header.hero{padding:64px 0 30px;border-bottom:3px solid var(--ink);background:linear-gradient(180deg,rgba(255,255,255,.75),rgba(244,247,243,0))}
+.alt-tag{font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:600;letter-spacing:.14em;color:var(--card);background:var(--ink);display:inline-block;padding:4px 10px;border-radius:3px}
+h1{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:clamp(30px,5.4vw,52px);line-height:1.06;margin:18px 0 12px}
+h1 .gx{color:var(--nginx)} h1 .kx{color:var(--k8s)}
+.hero p.lede{max-width:680px;color:var(--dim);font-size:17px}
+/* ---- nav ---- */
+nav.toc{position:sticky;top:0;z-index:50;background:var(--ink);overflow-x:auto;white-space:nowrap;scrollbar-width:none}
+nav.toc::-webkit-scrollbar{display:none}
+nav.toc a{display:inline-block;color:#B9C9BD;font-family:'IBM Plex Mono',monospace;font-size:12px;padding:11px 13px;text-decoration:none;border-right:1px solid #22301F}
+nav.toc a:hover,nav.toc a:focus-visible{background:var(--nginx);color:#fff;outline:none}
+/* ---- sections ---- */
+section{padding:52px 0 8px}
+.eyebrow{font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:600;letter-spacing:.16em;color:var(--nginx-dark);text-transform:uppercase;display:flex;align-items:center;gap:10px}
+.eyebrow::before{content:"";width:34px;height:2px;background:var(--nginx)}
+.eyebrow.k{color:var(--k8s-dark)} .eyebrow.k::before{background:var(--k8s)}
+.eyebrow.r{color:var(--alert)} .eyebrow.r::before{background:var(--alert)}
+h2{font-family:'Space Grotesk',sans-serif;font-size:clamp(24px,3.6vw,34px);line-height:1.12;margin:10px 0 14px}
+h3{font-family:'Space Grotesk',sans-serif;font-size:20px;margin:34px 0 10px}
+h4{font-family:'IBM Plex Mono',monospace;font-size:14px;letter-spacing:.06em;text-transform:uppercase;color:var(--dim);margin:24px 0 8px}
+p{margin:0 0 14px;max-width:74ch}
+strong{font-weight:600}
+em{font-style:italic}
+section p code, li code, td code{font-family:'IBM Plex Mono',monospace;font-size:.88em;background:#E6EDE6;border:1px solid var(--line);border-radius:3px;padding:1px 5px;white-space:nowrap}
+ul,ol{margin:0 0 16px 22px;max-width:74ch} li{margin-bottom:7px}
+/* ---- cards & callouts ---- */
+.card{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:20px 22px;margin:18px 0;box-shadow:0 1px 0 rgba(16,27,20,.06)}
+.whynot{background:var(--amber-bg);border:1px solid #E4CD9C;border-left:5px solid var(--amber);border-radius:6px;padding:14px 18px;margin:16px 0}
+.whynot .t{font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:600;letter-spacing:.12em;color:var(--amber);display:block;margin-bottom:6px}
+.whynot p{margin-bottom:8px} .whynot p:last-child{margin-bottom:0}
+.keyline{background:#E9F5EC;border:1px solid #BFDFC8;border-left:5px solid var(--nginx);border-radius:6px;padding:14px 18px;margin:16px 0}
+.keyline .t{font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:600;letter-spacing:.12em;color:var(--nginx-dark);display:block;margin-bottom:6px}
+.attack{background:#FBEDED;border:1px solid #E8BEBE;border-left:5px solid var(--alert);border-radius:6px;padding:14px 18px;margin:16px 0}
+.attack .t{font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:600;letter-spacing:.12em;color:var(--alert);display:block;margin-bottom:6px}
+/* ---- terminal / code ---- */
+pre.term{background:var(--term-bg);color:var(--term-fg);border-radius:8px;padding:18px 20px;overflow-x:auto;font-family:'IBM Plex Mono',monospace;font-size:13.5px;line-height:1.6;margin:16px 0;border:1px solid #1E2E24}
+pre.term .c{color:var(--term-dim)} pre.term .g{color:var(--term-green)} pre.term .b{color:var(--term-blue)} pre.term .y{color:#F0C674}
+pre.term .hd{display:block;color:#8FA898;border-bottom:1px solid #22352A;padding-bottom:6px;margin-bottom:10px;font-size:12px;letter-spacing:.1em}
+/* ---- tables ---- */
+table{border-collapse:collapse;width:100%;margin:16px 0;font-size:14.5px;background:var(--card);border:1px solid var(--line)}
+th{font-family:'IBM Plex Mono',monospace;font-size:12px;letter-spacing:.08em;text-transform:uppercase;text-align:left;background:var(--ink);color:#E7EFE8;padding:9px 12px}
+td{padding:9px 12px;border-top:1px solid var(--line);vertical-align:top}
+tr:nth-child(even) td{background:#F7FAF6}
+/* ---- figures ---- */
+figure{margin:22px 0;background:var(--card);border:1px solid var(--line);border-radius:8px;padding:16px;overflow-x:auto}
+figcaption{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--dim);margin-top:10px;letter-spacing:.04em}
+svg{display:block;max-width:100%;height:auto}
+svg text{font-family:'IBM Plex Mono',monospace}
+/* ---- animated packet flows ---- */
+.flowline{stroke-dasharray:6 7;animation:dash 1.1s linear infinite}
+@keyframes dash{to{stroke-dashoffset:-13}}
+.pkt{animation:none}
+@media (prefers-reduced-motion: reduce){.flowline{animation:none}}
+/* ---- summary grid ---- */
+.sumgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(270px,1fr));gap:14px;margin:18px 0}
+.sumgrid .card{margin:0}
+.sumgrid h5{font-family:'Space Grotesk',sans-serif;font-size:16px;margin-bottom:6px;display:flex;gap:8px;align-items:baseline}
+.sumgrid h5 .n{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--nginx-dark)}
+.sumgrid p{font-size:14px;margin:0;color:#33413A}
+/* ---- footer ---- */
+footer{border-top:3px solid var(--ink);margin-top:60px;padding:26px 0 60px;color:var(--dim);font-size:13px;font-family:'IBM Plex Mono',monospace}
+.divider{height:1px;background:var(--line);margin:44px 0 0}
+@media (max-width:640px){ body{font-size:15px} section{padding:40px 0 4px} }
+
+/* ---- exam mode ---- */
+details.q{background:var(--card);border:1px solid var(--line);border-radius:8px;margin:10px 0;overflow:hidden}
+details.q summary{cursor:pointer;padding:13px 16px;font-weight:600;list-style:none;display:flex;gap:10px;align-items:baseline}
+details.q summary::-webkit-details-marker{display:none}
+details.q summary .qn{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--nginx-dark);flex-shrink:0}
+details.q summary::after{content:"+";margin-left:auto;font-family:'IBM Plex Mono',monospace;color:var(--dim)}
+details.q[open] summary::after{content:"–"}
+details.q[open] summary{border-bottom:1px solid var(--line);background:#F1F6F1}
+details.q .a{padding:13px 16px;font-size:14.5px}
+details.q .a p{margin-bottom:8px} details.q .a p:last-child{margin-bottom:0}
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="wrap">
+    <span class="alt-tag">FIELD MANUAL · ALT 10,000 FT → 1 CM</span>
+    <h1>How a request survives a <span class="gx">billion-RPS</span> gateway.<br>Nginx · Envoy · <span class="kx">Kubernetes</span> · mTLS.</h1>
+    <p class="lede">A single HTTP request enters a datacenter and dies or gets answered in ~50 ms. This manual follows it down through every layer — load balancer, nginx event loop, rate limiter, bloom filter, kube-proxy, Envoy sidecar, mTLS handshake — and at every fork explains <strong>why this design and not the other one</strong>.</p>
+  </div>
+  <div class="wrap" style="margin-top:26px">
+  <figure style="margin:0">
+  <svg viewBox="0 0 920 150" role="img" aria-label="Request path from client through anycast, L4 load balancer, nginx, envoy sidecar to app pod">
+    <defs>
+      <marker id="arr" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#101B14"/></marker>
+    </defs>
+    <g font-size="12" fill="#101B14">
+      <rect x="10" y="50" width="100" height="50" rx="6" fill="#fff" stroke="#101B14" stroke-width="1.5"/><text x="60" y="72" text-anchor="middle">CLIENT</text><text x="60" y="88" text-anchor="middle" fill="#5A6A5F" font-size="10">TCP+TLS</text>
+      <rect x="170" y="50" width="110" height="50" rx="6" fill="#fff" stroke="#101B14" stroke-width="1.5"/><text x="225" y="72" text-anchor="middle">ANYCAST/L4</text><text x="225" y="88" text-anchor="middle" fill="#5A6A5F" font-size="10">ECMP · IPVS</text>
+      <rect x="340" y="50" width="110" height="50" rx="6" fill="#E9F5EC" stroke="#009639" stroke-width="2"/><text x="395" y="72" text-anchor="middle" fill="#00662A" font-weight="bold">NGINX</text><text x="395" y="88" text-anchor="middle" fill="#00662A" font-size="10">edge · L7</text>
+      <rect x="510" y="50" width="120" height="50" rx="6" fill="#fff" stroke="#101B14" stroke-width="1.5"/><text x="570" y="72" text-anchor="middle">INGRESS</text><text x="570" y="88" text-anchor="middle" fill="#5A6A5F" font-size="10">k8s Service</text>
+      <rect x="690" y="30" width="215" height="95" rx="8" fill="none" stroke="#326CE5" stroke-width="2" stroke-dasharray="5 4"/>
+      <text x="797" y="24" text-anchor="middle" fill="#1F4CB0" font-size="10">POD (shared netns)</text>
+      <rect x="705" y="45" width="90" height="48" rx="6" fill="#EDF2FD" stroke="#326CE5" stroke-width="1.5"/><text x="750" y="66" text-anchor="middle" fill="#1F4CB0">ENVOY</text><text x="750" y="82" text-anchor="middle" fill="#1F4CB0" font-size="10">sidecar</text>
+      <rect x="805" y="45" width="86" height="48" rx="6" fill="#fff" stroke="#101B14" stroke-width="1.5"/><text x="848" y="66" text-anchor="middle">APP</text><text x="848" y="82" text-anchor="middle" fill="#5A6A5F" font-size="10">:8080</text>
+      <line class="flowline" x1="110" y1="75" x2="162" y2="75" stroke="#009639" stroke-width="2.5" marker-end="url(#arr)"/>
+      <line class="flowline" x1="280" y1="75" x2="332" y2="75" stroke="#009639" stroke-width="2.5" marker-end="url(#arr)"/>
+      <line class="flowline" x1="450" y1="75" x2="502" y2="75" stroke="#009639" stroke-width="2.5" marker-end="url(#arr)"/>
+      <line class="flowline" x1="630" y1="75" x2="697" y2="70" stroke="#326CE5" stroke-width="2.5" marker-end="url(#arr)"/>
+      <line class="flowline" x1="795" y1="69" x2="805" y2="69" stroke="#326CE5" stroke-width="2.5"/>
+      <text x="140" y="65" text-anchor="middle" font-size="10" fill="#00662A">①</text>
+      <text x="310" y="65" text-anchor="middle" font-size="10" fill="#00662A">②</text>
+      <text x="480" y="65" text-anchor="middle" font-size="10" fill="#00662A">③</text>
+      <text x="662" y="60" text-anchor="middle" font-size="10" fill="#1F4CB0">④ mTLS</text>
+    </g>
+  </svg>
+  <figcaption>FIG 0 — The whole journey. Sections below zoom into each hop; animated dashes show packet direction.</figcaption>
+  </figure>
+  </div>
+</header>
+
+<nav class="toc" aria-label="Sections">
+  <div class="wrap" style="padding:0">
+    <a href="#summary">00 SUMMARY</a><a href="#alt10k">01 10,000FT</a><a href="#nginx">02 NGINX CORE</a><a href="#perf">03 PERF</a><a href="#rate">04 RATE LIMIT</a><a href="#auth">05 AUTH</a><a href="#sec">06 SECURITY+BLOOM</a><a href="#k8s">07 KUBERNETES</a><a href="#envoy">08 ENVOY</a><a href="#mtls">09 mTLS 1CM</a><a href="#drill">10 WHY-NOT DRILL</a><a href="#tlsint">11 TLS INTERCEPT</a><a href="#inspect">12 INSPECTION</a><a href="#agentic">13 AGENTIC+CAE</a><a href="#metal">14 METAL</a><a href="#resil">15 RESILIENCE</a><a href="#obs">16 OBSERVE</a><a href="#lab">17 DESIGN LAB</a><a href="#exam">18 EXAM</a><a href="#worked">19 WORKED ALGOS</a><a href="#worked2">20 WORKED ALGOS II</a>
+  </div>
+</nav>
+
+<main class="wrap">
+
+<!-- ================= 00 SUMMARY ================= -->
+<section id="summary">
+  <span class="eyebrow">Section 00 · Read this first</span>
+  <h2>The 80% in ten cards</h2>
+  <p>If you internalize only this section, you can hold a credible gateway-architecture conversation. Every card links to the deep section where the "why" lives.</p>
+  <div class="sumgrid">
+    <div class="card"><h5><span class="n">01</span> Nginx = event loop, not threads</h5><p>One worker per CPU core, each running a single-threaded epoll loop over tens of thousands of sockets. No thread per connection → no context-switch tax, no stack-per-connection memory. C10K solved by <em>waiting cheaply</em>, not working faster. <a href="#nginx">§02</a></p></div>
+    <div class="card"><h5><span class="n">02</span> Master/worker split</h5><p>Master (root) reads config, binds ports, forks workers (unprivileged). Reload = fork new workers with new config, drain old ones. Zero-downtime by process lifecycle, not by locks. <a href="#nginx">§02</a></p></div>
+    <div class="card"><h5><span class="n">03</span> Perf is measured, not assumed</h5><p>Confirm with p99 latency under open-loop load (wrk2), USE method on the host (utilization/saturation/errors), and flame graphs. Throughput without tail latency is a vanity metric. <a href="#perf">§03</a></p></div>
+    <div class="card"><h5><span class="n">04</span> Rate limit = leaky bucket in shared memory</h5><p><code>limit_req</code> keeps per-key state in a shared-memory zone guarded by a spinlock; excess requests are delayed or 503'd. Token bucket allows bursts; leaky bucket smooths them — nginx picked smoothing. <a href="#rate">§04</a></p></div>
+    <div class="card"><h5><span class="n">05</span> Distributed rate limit = local + async global</h5><p>Across pods you cannot lock a global counter per request (adds an RTT to every call). You run local buckets sized quota/N, and reconcile via Redis/gossip asynchronously. You trade exactness for latency — deliberately. <a href="#rate">§04</a></p></div>
+    <div class="card"><h5><span class="n">06</span> Auth at the edge, identity everywhere</h5><p>Edge validates JWT signatures statelessly (no DB hit per request); <code>auth_request</code> delegates when logic is complex; service-to-service identity is mTLS certs, not passwords. <a href="#auth">§05</a></p></div>
+    <div class="card"><h5><span class="n">07</span> Bloom filter = cheap "definitely not bad"</h5><p>10M-entry IP blocklist in ~12 MB of RAM, O(k) lookup, zero false negatives, ~0.1% false positives. Bloom answers "definitely clean / maybe dirty"; only the "maybe" pays for an exact check. <a href="#sec">§06</a></p></div>
+    <div class="card"><h5><span class="n">08</span> Kubernetes = reconciliation loops</h5><p>Everything is a controller diffing desired state (etcd) vs actual state, forever. Services are virtual IPs programmed into iptables/IPVS by kube-proxy on every node — there is no LB "box" in the pod path. <a href="#k8s">§07</a></p></div>
+    <div class="card"><h5><span class="n">09</span> Sidecar = network stack you don't rewrite</h5><p>Envoy sits in the pod's netns; iptables redirects all app traffic through it. mTLS, retries, telemetry, rate limits become platform config, applied uniformly to every language. <a href="#envoy">§08</a></p></div>
+    <div class="card"><h5><span class="n">10</span> mTLS = both sides prove identity</h5><p>Server TLS proves the server; mTLS adds a client certificate + a signature over the handshake transcript. In a mesh, certs carry SPIFFE IDs, live ~24h, and rotate automatically. <a href="#mtls">§09</a></p></div>
+  </div>
+  <div class="keyline"><span class="t">HOW TO USE THIS FOR THE APPLICATION</span>
+  <p>For each card, be able to (a) state the mechanism in one sentence, (b) name the alternative that was rejected, (c) say the one number that justifies the choice (e.g., "a cross-AZ Redis hop is ~1 ms; that's why global rate limiting is async"). Section 10 drills exactly this format.</p></div>
+</section>
+<div class="divider"></div>
+
+<!-- ================= 01 ALT 10,000FT ================= -->
+<section id="alt10k">
+  <span class="eyebrow">Section 01 · ALT 10,000 FT</span>
+  <h2>Before nginx ever sees a byte</h2>
+  <p>Type <code>api.example.com</code> and hit enter. At billion-requests-per-day scale, four systems have already made decisions before any L7 software runs. You must know them, because half of "nginx performance problems" are actually problems here.</p>
+
+  <h3>1. DNS + GSLB: which region?</h3>
+  <p>Authoritative DNS doesn't return one IP; a global load balancer (GSLB) returns the IP of the <em>healthiest, nearest region</em>, based on the resolver's location and region health. TTLs are short (30–60 s) so a region can be drained in minutes.</p>
+  <div class="whynot"><span class="t">WHY NOT LONG TTLs?</span><p>A 24 h TTL means a dead region keeps receiving traffic for up to 24 h from caches you don't control. The cost of short TTLs is more DNS queries — trivial. The cost of long TTLs is a region-sized outage you can't route around. Asymmetric risk → short TTLs win.</p></div>
+
+  <h3>2. Anycast + BGP: which datacenter edge?</h3>
+  <p>The same IP prefix (say <code>203.0.113.0/24</code>) is announced via BGP from 30 datacenters. Internet routers deliver each packet to the topologically nearest announcement. One IP, many physical locations — that's how a DDoS gets automatically <em>diluted</em> across the planet instead of concentrating on one site.</p>
+  <div class="whynot"><span class="t">WHY NOT ONE IP PER REGION (UNICAST ONLY)?</span><p>Then attackers pick one region's IP and focus 400 Gbps on it. Anycast forces the attack to split along the attacker's own network topology. Also, client failover with unicast requires DNS re-resolution (seconds to minutes); with anycast, BGP reconverges in seconds and the client keeps the same IP.</p></div>
+
+  <h3>3. L4 load balancer: which nginx machine?</h3>
+  <p>Inside the datacenter, an L4 balancer (IPVS, Maglev-style consistent hashing, or router ECMP) spreads TCP flows across hundreds of nginx boxes. It looks only at the 5-tuple (src IP, src port, dst IP, dst port, protocol). It never parses HTTP.</p>
+  <div class="whynot"><span class="t">WHY AN L4 TIER BELOW THE L7 TIER — WHY NOT JUST MORE NGINX?</span>
+  <p>Because the two layers scale on different resources. L4 forwarding is per-<em>packet</em> and nearly stateless — millions of packets/sec per core. L7 is per-<em>request</em>: TLS handshakes, header parsing, buffer allocation — thousands of requests/sec per core. If nginx boxes received traffic directly, adding/removing one would reshuffle client connections; the L4 tier with consistent hashing makes nginx boxes replaceable mid-flight. Cheap dumb layer protects expensive smart layer.</p></div>
+
+  <h3>4. The kernel handshake, before your process wakes</h3>
+  <p>SYN → SYN/ACK → ACK happens in the kernel. Completed connections sit in the <strong>accept queue</strong> (bounded by <code>listen backlog</code> and <code>net.core.somaxconn</code>) until nginx calls <code>accept()</code>. If that queue overflows, the kernel drops SYNs — clients see timeouts and <em>no log line appears anywhere in nginx</em>. First lesson of production debugging: the request you can't find in logs may have died in a kernel queue.</p>
+
+  <figure>
+  <svg viewBox="0 0 900 210" role="img" aria-label="Layered path: DNS, anycast, L4, kernel queue, nginx">
+    <g font-size="12" fill="#101B14">
+      <rect x="10" y="20" width="160" height="44" rx="6" fill="#fff" stroke="#101B14" stroke-width="1.5"/><text x="90" y="39" text-anchor="middle">DNS / GSLB</text><text x="90" y="55" text-anchor="middle" font-size="10" fill="#5A6A5F">picks region</text>
+      <rect x="10" y="80" width="160" height="44" rx="6" fill="#fff" stroke="#101B14" stroke-width="1.5"/><text x="90" y="99" text-anchor="middle">ANYCAST / BGP</text><text x="90" y="115" text-anchor="middle" font-size="10" fill="#5A6A5F">picks datacenter</text>
+      <rect x="10" y="140" width="160" height="44" rx="6" fill="#fff" stroke="#101B14" stroke-width="1.5"/><text x="90" y="159" text-anchor="middle">L4 LB (IPVS/ECMP)</text><text x="90" y="175" text-anchor="middle" font-size="10" fill="#5A6A5F">picks machine, 5-tuple hash</text>
+      <line class="flowline" x1="170" y1="42" x2="330" y2="42" stroke="#009639" stroke-width="2"/>
+      <line class="flowline" x1="170" y1="102" x2="330" y2="102" stroke="#009639" stroke-width="2"/>
+      <line class="flowline" x1="170" y1="162" x2="330" y2="162" stroke="#009639" stroke-width="2"/>
+      <rect x="340" y="20" width="250" height="164" rx="8" fill="#F7FAF6" stroke="#101B14" stroke-width="1.5"/>
+      <text x="465" y="42" text-anchor="middle" font-weight="bold">LINUX KERNEL</text>
+      <rect x="360" y="56" width="210" height="34" rx="4" fill="#fff" stroke="#5A6A5F"/><text x="465" y="77" text-anchor="middle" font-size="11">SYN queue (half-open)</text>
+      <rect x="360" y="100" width="210" height="34" rx="4" fill="#fff" stroke="#5A6A5F"/><text x="465" y="121" text-anchor="middle" font-size="11">accept queue (somaxconn)</text>
+      <text x="465" y="165" text-anchor="middle" font-size="10" fill="#C43D3D">overflow ⇒ silent SYN drop</text>
+      <line class="flowline" x1="590" y1="117" x2="700" y2="117" stroke="#009639" stroke-width="2"/>
+      <text x="645" y="107" text-anchor="middle" font-size="10" fill="#00662A">accept()</text>
+      <rect x="705" y="90" width="180" height="54" rx="6" fill="#E9F5EC" stroke="#009639" stroke-width="2"/><text x="795" y="112" text-anchor="middle" fill="#00662A" font-weight="bold">NGINX WORKER</text><text x="795" y="130" text-anchor="middle" font-size="10" fill="#00662A">epoll loop — §02</text>
+    </g>
+  </svg>
+  <figcaption>FIG 1 — Three routing decisions and two kernel queues sit in front of your first line of nginx config.</figcaption>
+  </figure>
+</section>
+<div class="divider"></div>
+
+<!-- ================= 02 NGINX ================= -->
+<section id="nginx">
+  <span class="eyebrow">Section 02 · ALT 1,000 FT</span>
+  <h2>Nginx internals: how one core serves 50,000 connections</h2>
+
+  <h3>The problem nginx was built to kill: C10K</h3>
+  <p>Apache's classic model: one process or thread per connection. Each thread costs a ~1 MB stack, kernel scheduling entries, and context switches (~1–5 µs each, plus trashed CPU caches). At 10,000 mostly-idle connections you burn gigabytes of RAM and most of your CPU on switching between threads that are all just <em>waiting</em> for bytes.</p>
+  <p>Igor Sysoev's observation (2002): a proxy's job is 99% waiting on the network and 1% computing. So don't dedicate an execution context to each wait. Instead, one process asks the kernel: <strong>"of my 50,000 sockets, which ones have something to do right now?"</strong> — and only touches those.</p>
+
+  <h3>Process architecture: master + workers</h3>
+  <figure>
+  <svg viewBox="0 0 900 240" role="img" aria-label="Master process forking workers sharing a listen socket">
+    <g font-size="12" fill="#101B14">
+      <rect x="330" y="14" width="240" height="52" rx="6" fill="#101B14"/><text x="450" y="36" text-anchor="middle" fill="#fff" font-weight="bold">MASTER (root)</text><text x="450" y="53" text-anchor="middle" fill="#B9C9BD" font-size="10">parse config · bind :80/:443 · fork · signals</text>
+      <rect x="60" y="120" width="180" height="58" rx="6" fill="#E9F5EC" stroke="#009639" stroke-width="2"/><text x="150" y="143" text-anchor="middle" fill="#00662A" font-weight="bold">WORKER 0 → CPU0</text><text x="150" y="161" text-anchor="middle" font-size="10" fill="#00662A">epoll loop · unprivileged</text>
+      <rect x="360" y="120" width="180" height="58" rx="6" fill="#E9F5EC" stroke="#009639" stroke-width="2"/><text x="450" y="143" text-anchor="middle" fill="#00662A" font-weight="bold">WORKER 1 → CPU1</text><text x="450" y="161" text-anchor="middle" font-size="10" fill="#00662A">epoll loop · unprivileged</text>
+      <rect x="660" y="120" width="180" height="58" rx="6" fill="#E9F5EC" stroke="#009639" stroke-width="2"/><text x="750" y="143" text-anchor="middle" fill="#00662A" font-weight="bold">WORKER N → CPUN</text><text x="750" y="161" text-anchor="middle" font-size="10" fill="#00662A">epoll loop · unprivileged</text>
+      <line x1="450" y1="66" x2="150" y2="118" stroke="#101B14" stroke-width="1.5"/>
+      <line x1="450" y1="66" x2="450" y2="118" stroke="#101B14" stroke-width="1.5"/>
+      <line x1="450" y1="66" x2="750" y2="118" stroke="#101B14" stroke-width="1.5"/>
+      <text x="270" y="86" font-size="10" fill="#5A6A5F">fork() — inherit listen FDs</text>
+      <rect x="285" y="200" width="330" height="30" rx="4" fill="#fff" stroke="#5A6A5F" stroke-dasharray="4 3"/><text x="450" y="219" text-anchor="middle" font-size="11" fill="#5A6A5F">shared memory: limit_req zones · cache keys · stats</text>
+    </g>
+  </svg>
+  <figcaption>FIG 2 — Master binds sockets as root, then drops to workers. Workers share zones via shm, nothing else.</figcaption>
+  </figure>
+  <ul>
+    <li><strong>Master</strong> runs as root only to bind ports &lt;1024 and read certs. It never touches traffic. It handles signals: <code>HUP</code> = reload, <code>USR1</code> = reopen logs, <code>USR2</code> = binary upgrade.</li>
+    <li><strong>Workers</strong> (one per core, pinned with <code>worker_cpu_affinity</code>) inherit the listening sockets across <code>fork()</code> and each run an independent event loop. A worker crash kills only its connections; master re-forks it.</li>
+    <li><strong>Hot reload</strong>: on <code>HUP</code>, master parses the new config, forks fresh workers, then tells old workers to stop accepting and finish in-flight requests. Two generations coexist briefly. No dropped connection, no lock, no "maintenance window".</li>
+  </ul>
+  <div class="whynot"><span class="t">WHY PROCESSES, NOT THREADS?</span>
+  <p><strong>Isolation:</strong> a segfault in a worker (or a buggy 3rd-party module) kills one process, not the server. With threads, one bad pointer kills everything. <strong>No shared-heap locking:</strong> workers share almost nothing, so there are no mutexes on the hot path; the few shared things (rate-limit zones) live in explicit shm with tiny critical sections. <strong>Security:</strong> workers drop privileges; a compromised worker can't read the master's key material handling. The cost — cross-worker state needs shm — is small because a proxy is mostly stateless per request.</p></div>
+  <div class="whynot"><span class="t">WHY ONE WORKER PER CORE, NOT 100 WORKERS?</span>
+  <p>Workers are never blocked (everything is non-blocking), so a worker can saturate a whole core by itself. More workers than cores just re-introduces the context switching you were escaping. The exception: heavy disk I/O can block (page-cache misses aren't pollable), which is why nginx added <code>aio threads</code> — a small thread pool <em>only</em> for blocking file reads, so the event loop never stalls.</p></div>
+
+  <h3>The event loop, mechanically</h3>
+  <pre class="term"><span class="hd">WORKER LOOP (simplified from src/event/ngx_event.c)</span>
+for (;;) {
+    timer = <span class="g">closest_timeout()</span>;            <span class="c">// e.g. 37ms until some client times out</span>
+    n = <span class="g">epoll_wait</span>(ep, events, 512, timer); <span class="c">// SLEEP until sockets are ready</span>
+    for (i = 0; i &lt; n; i++) {
+        c = events[i].data.ptr;             <span class="c">// connection object</span>
+        c-&gt;<span class="b">handler</span>(c);                      <span class="c">// run its state machine ONE step:</span>
+    }                                       <span class="c">//   read_request_line → read_headers →</span>
+    <span class="g">expire_timers</span>();                        <span class="c">//   … → connect_upstream → send_response</span>
+}</pre>
+  <p>Every connection is a <strong>state machine</strong>, and the handler pointer <em>is</em> the state. Read 300 bytes of a header, hit <code>EAGAIN</code> (no more bytes yet)? Save position, set handler to "continue reading headers", return to the loop. The worker instantly serves other sockets. When the kernel later signals readability, the machine resumes exactly where it left off. Concurrency without threads: it's cooperative multitasking where the kernel's readiness events are the scheduler.</p>
+
+  <div class="whynot"><span class="t">WHY epoll, NOT select/poll?</span>
+  <p><code>select</code>/<code>poll</code> are <em>stateless</em>: every call you hand the kernel the full list of N fds, kernel scans all N, you scan all N results → O(N) per wakeup even if one socket is active. At 50k connections that's 50k checks to find 3 events. <code>epoll</code> is <em>stateful</em>: register each fd once (<code>epoll_ctl</code>), the kernel keeps an interest list and pushes ready fds onto a ready list as interrupts arrive; <code>epoll_wait</code> returns only the ready ones → O(ready). Same idea as kqueue (BSD) and IOCP (Windows). This one syscall design difference is most of "how nginx scales".</p></div>
+  <div class="whynot"><span class="t">WHY NOT ASYNC/AWAIT OR GREEN THREADS (GO-STYLE)?</span>
+  <p>Goroutines/coroutines are the <em>same</em> readiness-driven model with nicer syntax — the runtime parks a goroutine on EAGAIN and its netpoller is epoll underneath. Nginx predates those runtimes and chooses explicit state machines for zero scheduler overhead and total memory control (~a few KB per idle connection, no growable stacks). Trade-off honestly stated: nginx module code is much harder to write. For a proxy written once and run everywhere, that trade is right; for your business logic, it usually isn't — which is why your app is in Go/Java and your edge is nginx.</p></div>
+
+  <h3>One request through the worker, 1 cm resolution</h3>
+  <ol>
+    <li><strong>accept.</strong> Listen fd is readable → <code>accept4(..., SOCK_NONBLOCK)</code>. With <code>reuseport</code>, each worker has its own listen socket and the kernel hash-shards incoming connections — this removed the old "thundering herd" (all workers waking for one connection) and the accept-mutex workaround.</li>
+    <li><strong>TLS.</strong> <code>SSL_do_handshake()</code> over multiple loop iterations. Session resumption (tickets/TLS1.3 PSK) skips a full asymmetric handshake — at scale this is a double-digit % CPU difference, since one RSA/ECDSA signature costs ~100µs–1ms of pure CPU.</li>
+    <li><strong>parse.</strong> Request line and headers parsed by a hand-written state machine that consumes byte-by-byte and can pause mid-token. No regex, no allocation per header — pointers into the read buffer.</li>
+    <li><strong>11 phases.</strong> The parsed request walks nginx's phase pipeline: <code>POST_READ → SERVER_REWRITE → FIND_CONFIG → REWRITE → PREACCESS</code> (limit_req/limit_conn live here) <code>→ ACCESS</code> (allow/deny, auth_request) <code>→ PRECONTENT → CONTENT</code> (proxy_pass/static) <code>→ LOG</code>. Modules register into phases — this is why config order sometimes doesn't matter (phase order wins) and why rate limiting runs <em>before</em> auth: reject cheap before verifying expensive.</li>
+    <li><strong>upstream.</strong> Non-blocking <code>connect()</code> to the backend — ideally reused from a keepalive pool (saves a 3-way handshake, and with TLS an entire handshake, per request). Request forwarded; response streamed back through buffers.</li>
+    <li><strong>respond.</strong> For files: <code>sendfile()</code> — kernel copies page cache → socket, zero trips through userspace. For proxied bodies: buffer chain. <code>tcp_nopush</code> coalesces headers+body into full packets.</li>
+    <li><strong>log + reset.</strong> Access log line buffered; connection either closes or re-arms as keep-alive with a tiny memory footprint, request-scoped memory freed in one shot.</li>
+  </ol>
+
+  <h3>Memory pools — why nginx doesn't call malloc per header</h3>
+  <p>Each request gets a <strong>pool</strong>: bump-pointer allocation from a slab; nothing is individually freed; when the request ends, the whole pool is destroyed at once. Consequences: allocation is ~a pointer increment, zero fragmentation over months of uptime, and no per-object leak class (you can't leak what dies with the pool). The trade-off — you can't free early — doesn't matter for request-scoped lifetimes measured in milliseconds.</p>
+
+  <h3>Buffering: the impedance-matching job</h3>
+  <p>A backend can emit a 2 MB response in 20 ms; a mobile client may need 20 s to receive it. If nginx streamed 1:1, the backend worker/connection is held hostage for 20 s (this is the classic <em>slow client attack surface</em> too). With <code>proxy_buffering on</code>, nginx slurps the response into memory (<code>proxy_buffers</code>) or temp file, frees the backend in 20 ms, and babysits the slow client itself — which costs it almost nothing (one epoll entry). Turn buffering <em>off</em> only for streaming/SSE/LLM token streams where time-to-first-byte matters more than backend efficiency. Notice this is exactly the IA-gateway tension: response inspection wants buffering; streaming UX wants none — hence chunk-wise scanning designs.</p>
+</section>
+<div class="divider"></div>
+
+<!-- ================= 03 PERF ================= -->
+<section id="perf">
+  <span class="eyebrow">Section 03 · Utilization &amp; proof</span>
+  <h2>Making nginx fast — and proving it's fast</h2>
+
+  <h3>The tuning set that actually matters (with the why)</h3>
+  <pre class="term"><span class="hd">/etc/nginx/nginx.conf — annotated production baseline</span>
+worker_processes auto;              <span class="c"># one per core. More = context switching, not speed</span>
+worker_rlimit_nofile 200000;        <span class="c"># each conn = 1 fd client + often 1 fd upstream</span>
+
+events {
+    worker_connections 65535;       <span class="c"># per worker. Real cap = fds & memory, not CPU</span>
+    multi_accept on;                <span class="c"># drain accept queue in bursts</span>
+}
+
+http {
+    sendfile on;                    <span class="c"># zero-copy file→socket, skips userspace</span>
+    tcp_nopush on;                  <span class="c"># full packets: headers+body coalesced</span>
+    keepalive_timeout 65s;          <span class="c"># client side: amortize TCP+TLS handshakes</span>
+    keepalive_requests 1000;
+
+    ssl_session_tickets on;         <span class="c"># resume TLS w/o full asymmetric crypto</span>
+    ssl_protocols TLSv1.2 TLSv1.3;
+
+    upstream app {
+        server 10.0.1.10:8080;
+        server 10.0.1.11:8080;
+        keepalive 128;              <span class="c"># pooled upstream conns — the single biggest</span>
+    }                               <span class="c">#   proxy win: no handshake per request</span>
+    server {
+        location / {
+            proxy_pass http://app;
+            proxy_http_version 1.1;         <span class="c"># required for upstream keepalive</span>
+            proxy_set_header Connection ""; <span class="c"># don't forward "close"</span>
+        }
+    }
+}</pre>
+  <div class="whynot"><span class="t">WHY IS worker_connections 65535 NOT "65k RPS"?</span>
+  <p>Connections ≠ requests. 65k <em>concurrent sockets</em> per worker is a memory/fd budget (~10 KB each idle). RPS depends on work per request (TLS? gzip? body size?). A 32-core box does ~1M idle keepalive connections easily but maybe 300k small-response RPS and only ~30–60k <em>new full TLS handshakes</em>/sec — handshake CPU is usually the real edge bottleneck, which is why session resumption and connection reuse dominate tuning.</p></div>
+  <div class="whynot"><span class="t">WHY gzip_static / caching BEFORE more hardware?</span>
+  <p>The fastest request is one you don't process: <code>proxy_cache</code> for idempotent GETs, pre-compressed assets, 304s via ETag. A cache hit is ~50µs of nginx time vs multi-ms of backend time. Capacity math: 30% cache hit ratio ≈ 43% more effective backend capacity, for free.</p></div>
+
+  <h3>Confirming performance: the methodology, not a number</h3>
+  <div class="card">
+  <p><strong>1. Load correctly — open-loop.</strong> Closed-loop tools (ab, default wrk) wait for a response before sending the next request, so when your server slows, the tool politely slows too and <em>hides the collapse</em>. This is coordinated omission. Use <code>wrk2</code> / Vegeta at a <em>fixed arrival rate</em> like real users:</p>
+  <pre class="term">wrk2 -t16 -c1000 -d120s -R 80000 --latency https://edge/api/ping
+<span class="c"># -R 80000: 80k RPS constant, regardless of how the server suffers</span>
+<span class="g">  p50 1.9ms · p99 12ms · p99.9 41ms</span>   <span class="c">← the tail IS the product</span></pre>
+  <p><strong>2. Find the knee.</strong> Step the rate: 20k → 40k → 60k… Plot p99 vs offered load. Healthy systems are flat then hockey-stick. Your usable capacity is ~70–80% of the knee, not the knee — queues need headroom for bursts (queueing theory: at ρ→1, wait time →∞).</p>
+  <p><strong>3. Diagnose with USE per resource.</strong> For CPU, memory, NIC, disk ask: Utilization? Saturation (queue)? Errors?</p>
+  <pre class="term"><span class="c"># CPU: user vs sys split — high %sys means kernel/network, not your config</span>
+mpstat -P ALL 1
+<span class="c"># accept-queue overflow = invisible drops (the silent killer from §01)</span>
+ss -lnt        <span class="c"># Recv-Q vs backlog on :443</span>
+netstat -s | grep -i "listen"   <span class="c"># "times the listen queue overflowed"</span>
+<span class="c"># where is CPU actually going? flame graph:</span>
+perf record -F 99 -a -g -- sleep 30 && perf script | stackcollapse-perf.pl | flamegraph.pl &gt; f.svg</pre>
+  <p><strong>4. Watch nginx's own truth.</strong> <code>stub_status</code> (active/reading/writing/waiting) plus log-derived histograms of <code>$request_time</code> and <code>$upstream_response_time</code>. The difference between those two numbers <em>is</em> nginx+client time — the fastest way to answer "is it us or the backend?".</p>
+  </div>
+  <div class="whynot"><span class="t">WHY p99 AND NOT AVERAGE?</span>
+  <p>At 1B requests/day, p99 = 10 million bad experiences daily. Worse: a single page fans out to ~50 backend calls; P(page hits at least one p99) = 1−0.99⁵⁰ ≈ 39%. Tail latency compounds through fan-out; averages hide it completely. Big-tech SLOs are stated in percentiles for this exact arithmetic.</p></div>
+</section>
+<div class="divider"></div>
+
+<!-- ================= 04 RATE LIMIT ================= -->
+<section id="rate">
+  <span class="eyebrow">Section 04 · Admission control</span>
+  <h2>Rate limiting: one box, then one thousand pods</h2>
+
+  <h3>Choose the algorithm by what "1000 req/s" should mean</h3>
+  <table>
+    <tr><th>Algorithm</th><th>Mechanism</th><th>Bursts?</th><th>Reject when</th><th>Use when</th></tr>
+    <tr><td><strong>Fixed window</strong></td><td>counter resets every second</td><td>2× at boundary (999 at t=0.99s + 999 at t=1.01s)</td><td>counter &gt; limit</td><td>almost never — boundary bug</td></tr>
+    <tr><td><strong>Sliding window</strong></td><td>weighted blend of this+last window</td><td>smoothed</td><td>estimate &gt; limit</td><td>good default, cheap, approximate</td></tr>
+    <tr><td><strong>Token bucket</strong></td><td>tokens drip in at rate r, burst = bucket size b</td><td>yes, up to b instantly</td><td>bucket empty</td><td>APIs where short bursts are legitimate (Envoy, AWS)</td></tr>
+    <tr><td><strong>Leaky bucket</strong></td><td>queue drains at fixed rate</td><td>no — output is perfectly smooth</td><td>queue full</td><td>protecting a backend that hates spikes (nginx <code>limit_req</code>)</td></tr>
+  </table>
+  <div class="whynot"><span class="t">WHY DID NGINX PICK LEAKY, ENVOY PICK TOKEN?</span>
+  <p>Different customer. Nginx's limiter historically protects <em>your servers</em> — smoothing arrival to a fixed drain rate is exactly backend protection. Envoy/API platforms enforce <em>customer quotas</em> — a paying client who was idle for 10 s reasonably expects to send 20 requests at once; token bucket encodes "average r with grace b". Neither is "better"; they encode different contracts. Interview gold: state the contract first, then the algorithm.</p></div>
+
+  <h3>Inside <code>limit_req</code> at 1 cm</h3>
+  <pre class="term"><span class="hd">nginx.conf</span>
+limit_req_zone $binary_remote_addr zone=perip:<span class="y">100m</span> rate=<span class="y">10r/s</span>;
+<span class="c"># 100 MB shared memory ≈ state for ~800k distinct client keys</span>
+server {
+  location /api/ {
+      limit_req zone=perip burst=<span class="y">20</span> <span class="y">nodelay</span>;
+      limit_req_status 429;
+  }
+}</pre>
+  <ul>
+    <li>The zone is a <strong>shared-memory red-black tree + LRU list</strong> keyed by client key; all workers see it; a <strong>spinlock</strong> guards updates (held for nanoseconds — fine, because the critical section is ~20 instructions).</li>
+    <li>Per key it stores essentially two numbers: <code>last_seen</code> and <code>excess</code> (in milli-requests). On arrival: <code>excess = max(0, excess − rate·Δt) + 1000</code>. If <code>excess &gt; burst</code> → reject. That's a leaky bucket computed lazily — <em>no timers, no background drainer</em>, state updates only when the key shows up. This is why it's O(1) and RAM-cheap.</li>
+    <li><code>burst=20</code> without <code>nodelay</code>: over-rate requests are <em>queued and released on schedule</em> (true smoothing, adds latency). With <code>nodelay</code>: the 20 pass immediately, the bucket just remembers the debt — burst tolerance without added latency. Most APIs want <code>nodelay</code>.</li>
+    <li>Memory pressure: when shm is full, nginx evicts the LRU keys — an attacker spraying millions of keys degrades you toward per-newest-keys limiting, not OOM. Bounded by design.</li>
+  </ul>
+
+  <h3>Now do it across 200 gateway pods</h3>
+  <p>Kubernetes scales your gateway horizontally, and your per-pod limiter silently becomes <code>200 × limit</code>. A client spraying requests across pods (which the L4 balancer does <em>for</em> them) gets 200× quota. Three honest designs:</p>
+  <figure>
+  <svg viewBox="0 0 900 250" role="img" aria-label="Three distributed rate limiting strategies">
+   <g font-size="11" fill="#101B14">
+    <rect x="10" y="14" width="270" height="220" rx="8" fill="#fff" stroke="#101B14" stroke-width="1.5"/>
+    <text x="145" y="36" text-anchor="middle" font-weight="bold">A · LOCAL ONLY</text>
+    <rect x="35" y="52" width="90" height="34" rx="4" fill="#E9F5EC" stroke="#009639"/><text x="80" y="73" text-anchor="middle">pod: r/N</text>
+    <rect x="165" y="52" width="90" height="34" rx="4" fill="#E9F5EC" stroke="#009639"/><text x="210" y="73" text-anchor="middle">pod: r/N</text>
+    <text x="145" y="118" text-anchor="middle" fill="#00662A">+0 ms · no dependency</text>
+    <text x="145" y="140" text-anchor="middle" fill="#C43D3D">unfair if traffic skewed</text>
+    <text x="145" y="162" text-anchor="middle" fill="#C43D3D">wrong when N autoscales</text>
+    <rect x="315" y="14" width="270" height="220" rx="8" fill="#fff" stroke="#101B14" stroke-width="1.5"/>
+    <text x="450" y="36" text-anchor="middle" font-weight="bold">B · SYNC GLOBAL (Redis/RLS)</text>
+    <rect x="340" y="52" width="90" height="34" rx="4" fill="#E9F5EC" stroke="#009639"/><text x="385" y="73" text-anchor="middle">pod</text>
+    <rect x="470" y="52" width="90" height="34" rx="4" fill="#E9F5EC" stroke="#009639"/><text x="515" y="73" text-anchor="middle">pod</text>
+    <rect x="405" y="120" width="90" height="34" rx="4" fill="#FBEDED" stroke="#C43D3D"/><text x="450" y="141" text-anchor="middle">Redis INCR</text>
+    <line class="flowline" x1="385" y1="86" x2="440" y2="118" stroke="#C43D3D" stroke-width="2"/>
+    <line class="flowline" x1="515" y1="86" x2="460" y2="118" stroke="#C43D3D" stroke-width="2"/>
+    <text x="450" y="180" text-anchor="middle" fill="#00662A">exact</text>
+    <text x="450" y="200" text-anchor="middle" fill="#C43D3D">+0.5–2 ms EVERY request · SPOF</text>
+    <rect x="620" y="14" width="270" height="220" rx="8" fill="#E9F5EC" stroke="#009639" stroke-width="2"/>
+    <text x="755" y="36" text-anchor="middle" font-weight="bold" fill="#00662A">C · LOCAL + ASYNC SYNC ✓</text>
+    <rect x="645" y="52" width="90" height="34" rx="4" fill="#fff" stroke="#009639"/><text x="690" y="73" text-anchor="middle">local bucket</text>
+    <rect x="775" y="52" width="90" height="34" rx="4" fill="#fff" stroke="#009639"/><text x="820" y="73" text-anchor="middle">local bucket</text>
+    <rect x="710" y="120" width="90" height="34" rx="4" fill="#fff" stroke="#5A6A5F" stroke-dasharray="4 3"/><text x="755" y="141" text-anchor="middle">aggregator</text>
+    <line class="flowline" x1="690" y1="86" x2="745" y2="118" stroke="#5A6A5F" stroke-width="1.5"/>
+    <line class="flowline" x1="820" y1="86" x2="765" y2="118" stroke="#5A6A5F" stroke-width="1.5"/>
+    <text x="755" y="180" text-anchor="middle" fill="#00662A">+0 ms hot path · fair over ~100 ms</text>
+    <text x="755" y="200" text-anchor="middle" fill="#B07A18">briefly inexact — acceptable</text>
+   </g>
+  </svg>
+  <figcaption>FIG 3 — Distributed limiting: decide on hot-path latency first, exactness second.</figcaption>
+  </figure>
+  <div class="whynot"><span class="t">WHY NOT SYNC-GLOBAL (B), IT'S "CORRECT"?</span>
+  <p>Do the math you'd be asked to do live: 200 pods × 5k RPS = 1M Redis ops/s just for limiting; every request eats a network RTT (~0.5 ms same-AZ, ~1–2 ms cross-AZ) — that can exceed your entire gateway processing budget; and Redis down now means either fail-open (no limiting during an attack — the exact moment you need it) or fail-closed (self-inflicted outage). So production systems (Envoy's global RLS included) put a <em>local</em> decision first and reconcile globally out-of-band: each pod spends a locally cached allowance, periodically reports usage, receives an adjusted share. Precision error is bounded by (sync interval × rate); with 100 ms sync it's invisible to humans and fatal to abusers. Rate limiting is <strong>capacity protection, not billing</strong> — approximate is the correct spec. (Billing/quota-with-money is the one case where you accept design B.)</p></div>
+  <div class="keyline"><span class="t">LAYERED LIMITS IN A REAL GATEWAY</span>
+  <p>L4 SYN-rate per IP (kernel/XDP) → nginx <code>limit_conn</code> (concurrent) → <code>limit_req</code> per IP (anti-abuse) → per-API-key token bucket (business quota, headers <code>X-RateLimit-Remaining</code>) → per-tenant concurrency at the app. Each layer rejects as early — hence as cheaply — as possible. Rejecting at L4 costs ~1 µs; rejecting after auth costs ~1 ms; rejecting at the DB costs an outage.</p></div>
+</section>
+<div class="divider"></div>
+
+<!-- ================= 05 AUTH ================= -->
+<section id="auth">
+  <span class="eyebrow">Section 05 · Identity at the edge</span>
+  <h2>Auth: verify at the door, carry identity inward</h2>
+
+  <h3>The core principle: stateless verification on the hot path</h3>
+  <p>1B requests/day ≈ 12k RPS average, 50k+ peak. If every request needed a session-store lookup ("is token abc123 valid?"), the session store becomes your global bottleneck and blast radius. So modern edges verify <strong>signed tokens (JWT)</strong>: the proof of validity travels <em>inside the request</em>.</p>
+  <div class="card">
+    <p><strong>JWT anatomy:</strong> <code>base64url(header).base64url(claims).signature</code>. Claims carry <code>sub</code> (who), <code>exp</code> (until when), <code>iss</code>/<code>aud</code> (from whom, for what), scopes. The signature is computed by the identity provider's <em>private</em> key; the gateway verifies with the <em>public</em> key fetched once from the IdP's JWKS URL and cached.</p>
+    <p><strong>Hot-path cost:</strong> one ECDSA/RS256 verify ≈ 20–80 µs CPU, zero I/O, zero shared state. Verification scales linearly with cores — the IdP is only touched at login and at key rotation.</p>
+  </div>
+  <div class="whynot"><span class="t">WHY NOT OPAQUE SESSION TOKENS EVERYWHERE?</span>
+  <p>Opaque tokens give instant revocation (delete the row) but cost a lookup per request. JWTs cost nothing per request but can't be un-signed — revocation is "wait for <code>exp</code>". Production compromise: <strong>short-lived access JWTs (5–15 min) + long-lived refresh tokens that ARE checked against a store</strong>. Compromise window = minutes; hot path = stateless. For the rare instant-kill (fired employee, leaked key) keep a small in-memory denylist of jti/subjects — a bloom filter (§06) makes that check ~free.</p></div>
+  <div class="whynot"><span class="t">WHY VERIFY AT THE GATEWAY AND NOT ONLY IN EACH SERVICE?</span>
+  <p>Both, actually — but for different things. Gateway verification rejects garbage before it consumes internal capacity (unauthenticated junk never touches a microservice) and centralizes IdP config. Services still verify the token (or the mesh's mTLS identity) because "the network is trusted" dies the day one internal box is popped — that's the zero-trust argument, and it's why §08–09 exist.</p></div>
+
+  <h3>Three nginx auth mechanics you should be able to sketch</h3>
+  <pre class="term"><span class="hd">1 · native JWT (nginx-plus / njs / lua) — verify inline</span>
+location /api/ {
+    auth_jwt "api" token=$http_authorization;
+    auth_jwt_key_request /jwks;          <span class="c"># cached public keys</span>
+    proxy_set_header X-User $jwt_claim_sub;   <span class="c"># identity flows inward as a header…</span>
+    proxy_pass http://app;                    <span class="c"># …signed variant: re-mint an internal token</span>
+}
+
+<span class="hd">2 · auth_request — subrequest to a policy service (complex logic)</span>
+location /api/ {
+    auth_request /_authz;                <span class="c"># internal subrequest; 2xx=allow 401/403=deny</span>
+    auth_request_set $uid $upstream_http_x_user;
+    proxy_pass http://app;
+}
+location = /_authz {
+    internal;
+    proxy_pass http://authz-svc/check;   <span class="c"># gets original URI+headers, returns verdict</span>
+    proxy_pass_request_body off;         <span class="c"># verdict needs headers, not the 10MB body</span>
+    proxy_cache authz_cache;             <span class="c"># cache allow-verdicts a few seconds</span>
+}
+
+<span class="hd">3 · mTLS client certs — machines, not humans (§09 for the crypto)</span>
+ssl_verify_client on;
+ssl_client_certificate /etc/nginx/ca.pem;
+proxy_set_header X-Client-DN $ssl_client_s_dn;</pre>
+  <p><code>auth_request</code> is the pattern Envoy generalizes as <code>ext_authz</code> — same shape: the data plane asks a sidecar/service "yes or no?" per request, with caching to keep the added latency at ~0 for repeat callers. Know the failure question: <em>what does the gateway do when the authz service is down?</em> Fail-closed for admin APIs, fail-open-with-alarm is sometimes accepted for read-only public data — say the words "explicit fail-policy per route" and you sound like you've operated this.</p>
+</section>
+<div class="divider"></div>
+
+<!-- ================= 06 SECURITY ================= -->
+<section id="sec">
+  <span class="eyebrow r">Section 06 · Hostile traffic</span>
+  <h2>Security at scale: bloom filters and throwing away the bad 30%</h2>
+  <p>At a real edge, a third or more of traffic is junk: scanners, credential stuffers, scrapers, botnets. The design goal is <strong>cost asymmetry</strong> — make each malicious request cost you nanoseconds and the attacker a real resource.</p>
+
+  <h3>Know the layer, know the defense</h3>
+  <table>
+    <tr><th>Attack</th><th>What it exhausts</th><th>Defense &amp; why it works</th></tr>
+    <tr><td>Volumetric flood (UDP/amp, 400 Gbps)</td><td>your uplink bandwidth</td><td>Anycast dilution + upstream scrubbing. Software can't help — the pipe is full before nginx exists.</td></tr>
+    <tr><td>SYN flood</td><td>kernel half-open table</td><td><strong>SYN cookies</strong>: encode the connection state <em>into the SYN/ACK sequence number</em> → server stores nothing until the client proves liveness by echoing it. Statelessness beats a memory-exhaustion attack by refusing to have memory.</td></tr>
+    <tr><td>Slowloris / slow-read</td><td>connection slots</td><td>Nearly free against nginx (idle epoll entry ≈ KBs, vs a whole Apache thread) + <code>client_header_timeout</code>, <code>limit_conn</code>. Architecture as defense.</td></tr>
+    <tr><td>HTTP flood (looks legit)</td><td>backend CPU/DB</td><td>Rate limits (§04), caching, fingerprinting + reputation (below), progressive challenges.</td></tr>
+    <tr><td>Credential stuffing</td><td>your users' accounts</td><td>Per-IP <em>and</em> per-username limits (attackers rotate IPs, not target lists), breached-password checks, IP reputation.</td></tr>
+  </table>
+
+  <h3>Bloom filters: the datastructure of "is this one of the 10 million bad ones?"</h3>
+  <p>You have a 10M-entry IP/token reputation blocklist, updated every minute, and 300k lookups/sec across workers. A hash set of strings costs ~600 MB+ and cache-miss-heavy probes; a remote lookup costs an RTT. A Bloom filter costs <strong>~12 MB</strong> and answers in ~100 ns — with one honest caveat.</p>
+  <figure>
+  <svg viewBox="0 0 900 230" role="img" aria-label="Bloom filter insert and query">
+   <g font-size="12" fill="#101B14">
+    <text x="20" y="30" font-weight="bold">INSERT  ip=198.51.100.7</text>
+    <text x="20" y="52" font-size="11" fill="#5A6A5F">h1(x)=2 · h2(x)=9 · h3(x)=17  → set those bits</text>
+    <g>
+      <rect x="20" y="66" width="860" height="30" fill="none"/>
+      <g font-size="10">
+      <rect x="20"  y="66" width="41" height="28" fill="#fff" stroke="#5A6A5F"/><text x="40" y="84" text-anchor="middle">0</text>
+      <rect x="63"  y="66" width="41" height="28" fill="#fff" stroke="#5A6A5F"/><text x="83" y="84" text-anchor="middle">0</text>
+      <rect x="106" y="66" width="41" height="28" fill="#C43D3D"/><text x="126" y="84" text-anchor="middle" fill="#fff">1</text>
+      <rect x="149" y="66" width="41" height="28" fill="#fff" stroke="#5A6A5F"/><text x="169" y="84" text-anchor="middle">0</text>
+      <rect x="192" y="66" width="41" height="28" fill="#fff" stroke="#5A6A5F"/><text x="212" y="84" text-anchor="middle">0</text>
+      <rect x="235" y="66" width="41" height="28" fill="#fff" stroke="#5A6A5F"/><text x="255" y="84" text-anchor="middle">0</text>
+      <rect x="278" y="66" width="41" height="28" fill="#fff" stroke="#5A6A5F"/><text x="298" y="84" text-anchor="middle">0</text>
+      <rect x="321" y="66" width="41" height="28" fill="#fff" stroke="#5A6A5F"/><text x="341" y="84" text-anchor="middle">0</text>
+      <rect x="364" y="66" width="41" height="28" fill="#fff" stroke="#5A6A5F"/><text x="384" y="84" text-anchor="middle">0</text>
+      <rect x="407" y="66" width="41" height="28" fill="#C43D3D"/><text x="427" y="84" text-anchor="middle" fill="#fff">1</text>
+      <rect x="450" y="66" width="41" height="28" fill="#fff" stroke="#5A6A5F"/><text x="470" y="84" text-anchor="middle">0</text>
+      <rect x="493" y="66" width="41" height="28" fill="#fff" stroke="#5A6A5F"/><text x="513" y="84" text-anchor="middle">0</text>
+      <rect x="536" y="66" width="41" height="28" fill="#fff" stroke="#5A6A5F"/><text x="556" y="84" text-anchor="middle">0</text>
+      <rect x="579" y="66" width="41" height="28" fill="#fff" stroke="#5A6A5F"/><text x="599" y="84" text-anchor="middle">0</text>
+      <rect x="622" y="66" width="41" height="28" fill="#fff" stroke="#5A6A5F"/><text x="642" y="84" text-anchor="middle">0</text>
+      <rect x="665" y="66" width="41" height="28" fill="#fff" stroke="#5A6A5F"/><text x="685" y="84" text-anchor="middle">0</text>
+      <rect x="708" y="66" width="41" height="28" fill="#fff" stroke="#5A6A5F"/><text x="728" y="84" text-anchor="middle">0</text>
+      <rect x="751" y="66" width="41" height="28" fill="#C43D3D"/><text x="771" y="84" text-anchor="middle" fill="#fff">1</text>
+      <rect x="794" y="66" width="41" height="28" fill="#fff" stroke="#5A6A5F"/><text x="814" y="84" text-anchor="middle">0</text>
+      </g>
+    </g>
+    <text x="20" y="136" font-weight="bold">QUERY</text>
+    <text x="20" y="160" font-size="11">any of the k bits = 0  →  <tspan fill="#00662A" font-weight="bold">DEFINITELY NOT IN SET</tspan> (no false negatives, ever)</text>
+    <text x="20" y="184" font-size="11">all k bits = 1  →  <tspan fill="#B07A18" font-weight="bold">PROBABLY in set</tspan> — bits may be set by other keys → false positive, rate p</text>
+    <text x="20" y="212" font-size="11" fill="#5A6A5F">sizing: m ≈ −n·ln p ⁄ (ln 2)²  ·  k ≈ (m/n)·ln 2  — worked example directly below</text>
+   </g>
+  </svg>
+  <figcaption>FIG 4 — Three hash functions set/check three bits. Asymmetric certainty is the whole trick.</figcaption>
+  </figure>
+  <div class="card">
+    <p><strong>Worked sizing (do this on a whiteboard):</strong> n = 10M entries, target false-positive p = 0.1%. Bits per entry ≈ 1.44·log₂(1/p) = 1.44·9.97 ≈ <strong>14.4 bits</strong>. Total m ≈ 144 Mbit ≈ <strong>18 MB</strong>; optimal hash count k ≈ 0.693·14.4 ≈ <strong>10</strong>. (Relax to p = 1% and it's 9.6 bits/entry ≈ 12 MB, k = 7.) Compare: exact hash set of IPv6 strings ≈ 50–100 bytes/entry ≈ 0.5–1 GB. Per lookup: k memory reads, no branches, no allocation.</p>
+  </div>
+  <div class="keyline"><span class="t">THE DEPLOYMENT PATTERN</span>
+  <p>Bloom filter in every worker/pod (18 MB is nothing; rebuilt and pushed each minute as a static blob — no coordination). Fast path: bit check says "definitely clean" for ≥99% of honest traffic → zero extra cost. "Maybe dirty" (real hits + 0.1% innocents) → confirm against the exact store (local RocksDB or Redis) before acting. Net effect: the expensive exact check runs on ~0.1% of clean traffic instead of 100%.</p></div>
+  <div class="whynot"><span class="t">WHY NOT JUST A HASH SET / WHY NOT CUCKOO?</span>
+  <p>Hash set: 30–50× more memory, and at 10 pods × 200 workers that's the difference between "fits in L2-ish working set" and "evicts everything else". Cuckoo filters do support deletion and can beat Bloom below p≈3%, and are the right answer if your blocklist needs frequent removals — say that. Bloom's counter-answer for this use case: the set is rebuilt wholesale every minute anyway, so deletion is free via replacement, and Bloom's code is 40 lines you can audit. Also name the sibling: <strong>count-min sketch</strong> for "which keys are hot right now" (heavy-hitter detection feeding the rate limiter) — same family, frequency instead of membership.</p></div>
+
+  <h3>Deciding who's suspicious in the first place</h3>
+  <ol>
+    <li><strong>Fingerprint beyond the IP.</strong> TLS ClientHello ordering (JA3/JA4 hash) exposes the actual client library — a "Chrome" User-Agent with a Python-requests JA3 is lying. HTTP/2 SETTINGS order and header order fingerprints similarly. Attackers rotate IPs cheaply; rotating a TLS stack is expensive. Always key detection on what's expensive to fake.</li>
+    <li><strong>Behavioral stats per key.</strong> Request-rate percentiles, path entropy (scanners touch many 404s), inter-arrival regularity (bots are metronomes, humans are bursty), impossible geography (same session, two continents, 3 min apart). Count-min sketches + EWMA keep this O(1) per request.</li>
+    <li><strong>Score, don't binary-block.</strong> Reputation score per fingerprint → tiered response: full service / rate-limited / challenged / tarpitted / dropped.</li>
+  </ol>
+  <div class="whynot"><span class="t">WHY GRADUATED RESPONSE, NOT INSTANT BAN?</span>
+  <p>Three reasons. <strong>False positives are customers</strong>: a university NAT or carrier CGNAT puts 10k humans behind one IP — banning it is a self-DoS. <strong>Feedback denial</strong>: a hard 403 tells the botnet operator exactly when detection triggered, so they binary-search your threshold; a silent 20% slowdown or tarpit (accept, drip bytes) wastes their fleet and blinds their tuning. <strong>Evidence</strong>: challenged-but-passing traffic labels your training data. Blocking is the last rung, not the first.</p></div>
+  <div class="attack"><span class="t">PIPELINE ORDER — CHEAPEST CHECK FIRST, ALWAYS</span>
+  <p>XDP/kernel drop of known-bad prefixes (~ns) → SYN cookies (~ns) → bloom reputation check (~100 ns) → limit_req (~µs) → JWT verify (~50 µs) → WAF/body rules (~100 µs–ms) → ML anomaly scoring (ms, async where possible) → backend. Each stage sheds traffic so the next, pricier stage sees less. That single ordering sentence is the architecture.</p></div>
+</section>
+<div class="divider"></div>
+
+<!-- ================= 07 KUBERNETES ================= -->
+<section id="k8s">
+  <span class="eyebrow k">Section 07 · ALT 100 FT</span>
+  <h2>Kubernetes: the machine that runs your gateway fleet</h2>
+
+  <h3>The one idea underneath everything: reconciliation</h3>
+  <p>Kubernetes is not a scheduler with an API bolted on. It is a <strong>database of desired state (etcd) plus a swarm of controllers</strong>, each running the same loop forever: <em>observe actual state → diff against desired → act to shrink the diff</em>. You never command "start a container"; you declare "3 replicas should exist" and controllers conspire until reality matches. This is why K8s self-heals: a dead pod is just a diff, and diffs get fixed.</p>
+  <div class="whynot"><span class="t">WHY DECLARATIVE + LEVEL-TRIGGERED, NOT IMPERATIVE COMMANDS?</span>
+  <p>Imperative ("run X on node 7") requires the commander to see every failure and re-issue — miss one event and state drifts forever. Level-triggered reconciliation only needs the <em>current</em> state to be readable: crash a controller, restart it, it re-lists, re-diffs, converges. Edge-triggered systems must never miss an event; level-triggered systems merely need to look again. At datacenter scale, "you will miss events" is a law of physics, so K8s chose the model that survives it.</p></div>
+
+  <figure>
+  <svg viewBox="0 0 900 320" role="img" aria-label="Kubernetes control plane and node components">
+   <g font-size="11" fill="#101B14">
+    <rect x="10" y="14" width="430" height="290" rx="8" fill="#EDF2FD" stroke="#326CE5" stroke-width="2"/>
+    <text x="225" y="38" text-anchor="middle" font-weight="bold" fill="#1F4CB0">CONTROL PLANE</text>
+    <rect x="150" y="52" width="150" height="46" rx="6" fill="#fff" stroke="#326CE5" stroke-width="1.5"/><text x="225" y="72" text-anchor="middle">kube-apiserver</text><text x="225" y="88" text-anchor="middle" font-size="9" fill="#5A6A5F">authn·authz·admission·watch</text>
+    <rect x="35" y="130" width="120" height="44" rx="6" fill="#fff" stroke="#326CE5"/><text x="95" y="149" text-anchor="middle">etcd (raft)</text><text x="95" y="164" text-anchor="middle" font-size="9" fill="#5A6A5F">only stateful piece</text>
+    <rect x="170" y="130" width="120" height="44" rx="6" fill="#fff" stroke="#326CE5"/><text x="230" y="149" text-anchor="middle">scheduler</text><text x="230" y="164" text-anchor="middle" font-size="9" fill="#5A6A5F">filter → score → bind</text>
+    <rect x="305" y="130" width="120" height="44" rx="6" fill="#fff" stroke="#326CE5"/><text x="365" y="149" text-anchor="middle">controller-mgr</text><text x="365" y="164" text-anchor="middle" font-size="9" fill="#5A6A5F">deploy/rs/node loops</text>
+    <line class="flowline" x1="225" y1="98" x2="95" y2="128" stroke="#326CE5" stroke-width="1.5"/>
+    <line class="flowline" x1="225" y1="98" x2="230" y2="128" stroke="#326CE5" stroke-width="1.5"/>
+    <line class="flowline" x1="225" y1="98" x2="365" y2="128" stroke="#326CE5" stroke-width="1.5"/>
+    <text x="225" y="215" text-anchor="middle" font-size="10" fill="#1F4CB0">everything talks ONLY via the apiserver;</text>
+    <text x="225" y="232" text-anchor="middle" font-size="10" fill="#1F4CB0">nothing talks to etcd directly</text>
+    <rect x="470" y="14" width="420" height="290" rx="8" fill="#fff" stroke="#101B14" stroke-width="1.5"/>
+    <text x="680" y="38" text-anchor="middle" font-weight="bold">EVERY WORKER NODE</text>
+    <rect x="495" y="52" width="170" height="44" rx="6" fill="#F7FAF6" stroke="#5A6A5F"/><text x="580" y="71" text-anchor="middle">kubelet</text><text x="580" y="87" text-anchor="middle" font-size="9" fill="#5A6A5F">watches "my pods" → CRI</text>
+    <rect x="690" y="52" width="170" height="44" rx="6" fill="#F7FAF6" stroke="#5A6A5F"/><text x="775" y="71" text-anchor="middle">kube-proxy</text><text x="775" y="87" text-anchor="middle" font-size="9" fill="#5A6A5F">Services → iptables/IPVS</text>
+    <rect x="495" y="112" width="170" height="44" rx="6" fill="#F7FAF6" stroke="#5A6A5F"/><text x="580" y="131" text-anchor="middle">containerd + runc</text><text x="580" y="147" text-anchor="middle" font-size="9" fill="#5A6A5F">namespaces + cgroups</text>
+    <rect x="690" y="112" width="170" height="44" rx="6" fill="#F7FAF6" stroke="#5A6A5F"/><text x="775" y="131" text-anchor="middle">CNI plugin</text><text x="775" y="147" text-anchor="middle" font-size="9" fill="#5A6A5F">pod IPs · routes</text>
+    <rect x="495" y="180" width="365" height="100" rx="6" fill="#EDF2FD" stroke="#326CE5" stroke-dasharray="5 4"/>
+    <text x="680" y="200" text-anchor="middle" font-size="10" fill="#1F4CB0">pods (each = shared netns, one IP)</text>
+    <rect x="515" y="212" width="150" height="50" rx="6" fill="#fff" stroke="#326CE5"/><text x="590" y="232" text-anchor="middle" font-size="10">envoy | app</text><text x="590" y="248" text-anchor="middle" font-size="9" fill="#5A6A5F">talk over localhost</text>
+    <rect x="690" y="212" width="150" height="50" rx="6" fill="#fff" stroke="#326CE5"/><text x="765" y="232" text-anchor="middle" font-size="10">envoy | app</text><text x="765" y="248" text-anchor="middle" font-size="9" fill="#5A6A5F">talk over localhost</text>
+    <line class="flowline" x1="440" y1="74" x2="493" y2="74" stroke="#326CE5" stroke-width="2"/>
+    <text x="455" y="62" font-size="9" fill="#1F4CB0">watch</text>
+   </g>
+  </svg>
+  <figcaption>FIG 5 — Control plane decides; every node independently makes its slice of the decision real.</figcaption>
+  </figure>
+
+  <h3>What each piece really does (and the why behind its shape)</h3>
+  <ul>
+    <li><strong>kube-apiserver</strong> — the only door. Every request passes authn (certs/tokens/OIDC) → authz (RBAC) → <strong>admission webhooks</strong> (mutate/validate — this hook is how Istio injects sidecars, §08). It's stateless and horizontally scalable because all state lives in etcd. Its killer feature is <strong>watch</strong>: long-lived streams pushing object changes to every controller/kubelet — that's how 5,000 nodes stay current without polling melting the API.</li>
+    <li><strong>etcd</strong> — Raft-replicated KV store; every write is a quorum commit (2 of 3, 3 of 5). <em>Why Raft?</em> Split-brain on cluster state ("both halves think they own the pods") is catastrophic; quorum makes a minority partition read-only-and-safe instead of divergent. This is also etcd's cost: ~thousands of writes/sec, latency-sensitive to disk fsync — which is why K8s clusters cap around ~5k nodes and why you never store app data in etcd.</li>
+    <li><strong>scheduler</strong> — watches for pods with no node; two phases: <em>filter</em> (kick out nodes that can't: insufficient CPU, taints, port clash, affinity) then <em>score</em> (rank the survivors: spread, bin-packing, image locality), then writes one field: <code>spec.nodeName</code>. It only <em>suggests</em>; kubelet does the work.</li>
+    <li><strong>kubelet</strong> — the node agent. Watches "pods bound to me", drives the container runtime over CRI (containerd → runc), sets up cgroups (CPU/mem limits) and namespaces, runs liveness/readiness probes, reports status. <em>Readiness vs liveness — the interview classic:</em> readiness failing removes the pod from Service endpoints (stop sending traffic, don't kill); liveness failing restarts the container. Wiring a dependency check (DB reachable?) into <em>liveness</em> causes restart storms during a DB blip — one of the most common self-inflicted outages.</li>
+    <li><strong>Container = namespaces + cgroups, no magic.</strong> PID/net/mount/UTS/IPC namespaces give isolation of <em>view</em>; cgroups give isolation of <em>consumption</em>; it's all ordinary processes on the host kernel. Pods exist because the sidecar pattern needs two containers sharing one network namespace — "pod" is literally "a shared set of namespaces".</li>
+  </ul>
+
+  <h3>Services and kube-proxy: the load balancer that isn't there</h3>
+  <p>A Service (ClusterIP <code>10.96.7.20:80</code>) is a <em>virtual</em> IP — no process listens on it, no box hosts it. kube-proxy on <strong>every node</strong> watches Services/EndpointSlices and programs the kernel: "packets to 10.96.7.20:80 → DNAT to one of [pod IPs]". The load balancing happens <em>inside the sender's own kernel</em> at connection time.</p>
+  <pre class="term"><span class="hd">conceptually, what kube-proxy writes (iptables mode)</span>
+-A KUBE-SERVICES -d 10.96.7.20/32 -p tcp --dport 80 -j KUBE-SVC-XYZ
+-A KUBE-SVC-XYZ -m statistic --mode random --probability 0.333 -j KUBE-SEP-A   <span class="c"># → 10.244.1.5</span>
+-A KUBE-SVC-XYZ -m statistic --mode random --probability 0.500 -j KUBE-SEP-B   <span class="c"># → 10.244.2.9</span>
+-A KUBE-SVC-XYZ -j KUBE-SEP-C                                                  <span class="c"># → 10.244.3.4</span></pre>
+  <div class="whynot"><span class="t">WHY iptables vs IPVS vs eBPF — AND WHEN IT MATTERS</span>
+  <p>iptables rules are a <em>linear</em> chain: with 10k services the first packet of a connection walks O(n) rules, and every update rewrites the whole table (minutes at scale). IPVS uses an in-kernel <em>hash table</em>: O(1) lookup, incremental updates, real algorithms (least-conn, sh). eBPF (Cilium) goes further: replaces both kube-proxy and much of iptables with programmable kernel maps, socket-level LB (connect-time, so no per-packet NAT at all). Under ~1k services, all three feel identical — say that too; picking IPVS "because scale" for a 50-service cluster is cargo cult.</p></div>
+  <div class="whynot"><span class="t">WHY IS SERVICE LB CONNECTION-LEVEL, AND WHY DOES THAT BREAK gRPC?</span>
+  <p>DNAT is decided when the TCP connection opens; every request on that connection goes to the same pod. gRPC/HTTP2 multiplexes thousands of requests over one long-lived connection → one pod gets hammered, others idle. Fixes: L7-aware balancing — which is precisely Envoy's job (§08). This one fact explains half of "why do I need a mesh if K8s already load-balances?"</p></div>
+
+  <h3>Traffic from the internet inward</h3>
+  <p><strong>NodePort</strong> (every node opens 3xxxx port) → <strong>LoadBalancer</strong> (cloud LB → NodePorts) → <strong>Ingress / Gateway API</strong>: one L7 proxy deployment (nginx-ingress or Envoy) receives everything and routes by host/path to Services. The ingress controller is just the reconciliation pattern again: watch Ingress objects → render nginx.conf / Envoy xDS → hot-reload. Everything you learned in §02–06 applies verbatim to that pod fleet; §04's distributed rate limiting exists <em>because</em> the ingress is a fleet.</p>
+</section>
+<div class="divider"></div>
+
+<!-- ================= 08 ENVOY ================= -->
+<section id="envoy">
+  <span class="eyebrow k">Section 08 · The sidecar</span>
+  <h2>Envoy: the network stack you deploy instead of writing</h2>
+
+  <h3>Why the sidecar pattern exists at all</h3>
+  <p>Every service needs the same networking features: mTLS, retries with budgets, timeouts, circuit breaking, telemetry, rate limits. Option A: a library per language (Java, Go, Python, Node…) — you now maintain N implementations, and upgrading means redeploying every service on every team's schedule. Option B: put one proxy <em>next to</em> each service instance, and force all traffic through it. Features become platform config; the app thinks it's talking plaintext on localhost.</p>
+  <div class="whynot"><span class="t">WHY A SIDECAR PER POD, NOT ONE PROXY PER NODE?</span>
+  <p>Per-pod gives per-service identity (the cert in §09 belongs to <em>this</em> service account, not "whatever runs on node 7"), per-service config/blast-radius, and clean cgroup accounting of proxy cost. Per-node halves memory overhead but mixes identities and couples tenants. The industry is actually oscillating: Istio ambient mode splits the difference (per-node L4 "ztunnel" for mTLS + optional per-namespace L7 "waypoint" proxies) precisely because per-pod Envoys at 10k pods cost real RAM and upgrade pain. Knowing <em>both</em> directions of this trade — and that it's still moving — is a staff-level answer.</p></div>
+
+  <h3>How traffic gets captured: the iptables trick</h3>
+  <p>The app is unmodified — so who reroutes its packets? An <strong>init container</strong> (injected by the mutating admission webhook from §07, or a CNI plugin) runs once with NET_ADMIN and writes iptables rules <em>inside the pod's own netns</em>:</p>
+  <pre class="term"><span class="hd">inside the pod netns (conceptual)</span>
+iptables -t nat -A OUTPUT   -p tcp -j REDIRECT --to-port 15001  <span class="c"># app's outbound → envoy</span>
+iptables -t nat -A PREROUTING -p tcp -j REDIRECT --to-port 15006 <span class="c"># inbound → envoy first</span>
+<span class="c"># envoy's own uid 1337 exempted, or loops forever</span></pre>
+  <p>Envoy learns the packet's <em>original</em> destination via <code>SO_ORIGINAL_DST</code> and routes accordingly. The app dialed <code>payments:8080</code>; Envoy intercepted, upgraded to mTLS, applied policy, load-balanced to a specific pod, and told nobody.</p>
+
+  <figure>
+  <svg viewBox="0 0 900 200" role="img" aria-label="Envoy request pipeline: listener, filter chain, router, cluster">
+   <g font-size="11" fill="#101B14">
+    <rect x="10" y="70" width="90" height="50" rx="6" fill="#fff" stroke="#101B14" stroke-width="1.5"/><text x="55" y="99" text-anchor="middle">downstream</text>
+    <rect x="140" y="40" width="640" height="120" rx="8" fill="#EDF2FD" stroke="#326CE5" stroke-width="2"/>
+    <text x="460" y="32" text-anchor="middle" fill="#1F4CB0" font-weight="bold">ENVOY WORKER THREAD (event loop — same model as nginx §02)</text>
+    <rect x="160" y="70" width="100" height="55" rx="6" fill="#fff" stroke="#326CE5"/><text x="210" y="93" text-anchor="middle">Listener</text><text x="210" y="110" text-anchor="middle" font-size="9" fill="#5A6A5F">:15006 · TLS</text>
+    <rect x="280" y="70" width="200" height="55" rx="6" fill="#fff" stroke="#326CE5"/><text x="380" y="88" text-anchor="middle">HTTP filter chain</text><text x="380" y="106" text-anchor="middle" font-size="9" fill="#5A6A5F">jwt_authn → ext_authz → ratelimit → …</text>
+    <rect x="500" y="70" width="110" height="55" rx="6" fill="#fff" stroke="#326CE5"/><text x="555" y="93" text-anchor="middle">Router</text><text x="555" y="110" text-anchor="middle" font-size="9" fill="#5A6A5F">match host/path</text>
+    <rect x="630" y="70" width="130" height="55" rx="6" fill="#fff" stroke="#326CE5"/><text x="695" y="88" text-anchor="middle">Cluster</text><text x="695" y="106" text-anchor="middle" font-size="9" fill="#5A6A5F">endpoints · LB · outlier</text>
+    <line class="flowline" x1="100" y1="95" x2="158" y2="95" stroke="#326CE5" stroke-width="2"/>
+    <line class="flowline" x1="260" y1="97" x2="278" y2="97" stroke="#326CE5" stroke-width="2"/>
+    <line class="flowline" x1="480" y1="97" x2="498" y2="97" stroke="#326CE5" stroke-width="2"/>
+    <line class="flowline" x1="610" y1="97" x2="628" y2="97" stroke="#326CE5" stroke-width="2"/>
+    <rect x="800" y="70" width="90" height="50" rx="6" fill="#fff" stroke="#101B14" stroke-width="1.5"/><text x="845" y="99" text-anchor="middle">upstream</text>
+    <line class="flowline" x1="760" y1="95" x2="798" y2="95" stroke="#326CE5" stroke-width="2"/>
+   </g>
+  </svg>
+  <figcaption>FIG 6 — Envoy's four nouns. Config for each arrives live over xDS; nginx's equivalent is a file + reload.</figcaption>
+  </figure>
+
+  <h3>The four nouns + the API that feeds them</h3>
+  <ul>
+    <li><strong>Listener</strong> (LDS): an address to accept on, plus its filter chains — where TLS terminates.</li>
+    <li><strong>Filters</strong>: the extensibility spine. Network filters (tcp_proxy, mongo) and HTTP filters (<code>jwt_authn</code>, <code>ext_authz</code>, <code>ratelimit</code>, <code>fault</code>, WASM for custom logic). This is the slot where an AI-gateway's prompt-inspection filter conceptually lives: a body-buffering/streaming HTTP filter that scores content before <code>router</code> forwards it.</li>
+    <li><strong>Route</strong> (RDS): virtual hosts, path matches, per-route policy (timeouts, retries, mirror, traffic split 99/1 → canary).</li>
+    <li><strong>Cluster</strong> (CDS) + <strong>Endpoints</strong> (EDS): named upstreams with LB policy, health checks, circuit breakers, <em>outlier detection</em> (ejects a pod that starts throwing 5xx — passive health checking nginx OSS lacks).</li>
+  </ul>
+  <div class="whynot"><span class="t">WHY ENVOY FOR THE MESH AND NOT NGINX?</span>
+  <p>Not speed — both are C/C++ event loops of comparable throughput. The decisive feature is <strong>xDS: config as a live gRPC stream</strong>. A mesh reprograms routes/endpoints/certs thousands of times an hour as pods churn; Envoy applies deltas in-memory with zero connection loss, while nginx's model is render-file-and-reload (fork new workers) — fine hourly at the edge, unusable at mesh churn rates. Plus first-class gRPC/HTTP2 semantics and per-route stats. Conversely at the internet edge, nginx's maturity, ecosystem, and static-file performance keep it the default. Right tool per tier; many shops run nginx at the edge and Envoy inside — knowing <em>why both</em> is the answer.</p></div>
+
+  <h3>Istio in three sentences</h3>
+  <p><strong>istiod</strong> (control plane) watches K8s (Services, pods, its own CRDs like VirtualService/DestinationRule), compiles them into per-proxy Envoy config, and streams it over xDS. The <strong>webhook</strong> injects the sidecar + init container into every pod at admission. istiod is also the <strong>CA</strong>: it signs each sidecar's workload certificate — which is the bridge into §09.</p>
+</section>
+<div class="divider"></div>
+
+<!-- ================= 09 mTLS ================= -->
+<section id="mtls">
+  <span class="eyebrow k">Section 09 · ALT 1 CM</span>
+  <h2>mTLS: both ends prove who they are — down to the bytes</h2>
+
+  <h3>First, plain TLS 1.3 in one breath</h3>
+  <p>ClientHello (supported ciphers + client's ephemeral ECDHE public key) → ServerHello (chosen cipher + server's ephemeral key) → both sides compute the same shared secret (ECDHE) → server sends its <strong>certificate</strong> + <strong>CertificateVerify</strong> (a signature over the handshake transcript made with the private key matching the cert) → Finished. Client checks: cert chains to a trusted CA, name matches, signature valid. One round trip; everything after ServerHello is already encrypted.</p>
+  <div class="whynot"><span class="t">WHY EPHEMERAL DH + A SIGNATURE, NOT "ENCRYPT WITH THE SERVER'S RSA KEY"?</span>
+  <p>Old-style RSA key exchange meant: record traffic today, steal the server key next year, decrypt everything retroactively. Ephemeral ECDHE keys die after the handshake → <strong>forward secrecy</strong>: the long-term key only ever <em>signs</em>, never encrypts, so its theft compromises future impersonation but not past traffic. TLS 1.3 removed static-RSA exchange entirely for this reason.</p></div>
+
+  <h3>What the "m" adds</h3>
+  <figure>
+  <svg viewBox="0 0 900 240" role="img" aria-label="mTLS handshake sequence">
+   <g font-size="11" fill="#101B14">
+    <line x1="150" y1="30" x2="150" y2="220" stroke="#5A6A5F" stroke-width="1.5"/>
+    <line x1="750" y1="30" x2="750" y2="220" stroke="#5A6A5F" stroke-width="1.5"/>
+    <text x="150" y="20" text-anchor="middle" font-weight="bold">CLIENT ENVOY</text>
+    <text x="750" y="20" text-anchor="middle" font-weight="bold">SERVER ENVOY</text>
+    <line class="flowline" x1="150" y1="52" x2="748" y2="52" stroke="#326CE5" stroke-width="2"/><text x="450" y="44" text-anchor="middle">ClientHello + keyshare</text>
+    <line class="flowline" x1="750" y1="88" x2="152" y2="88" stroke="#326CE5" stroke-width="2"/><text x="450" y="80" text-anchor="middle">ServerHello + keyshare · <tspan fill="#C43D3D" font-weight="bold">CertificateRequest</tspan> · server cert + verify</text>
+    <line class="flowline" x1="150" y1="130" x2="748" y2="130" stroke="#009639" stroke-width="2"/><text x="450" y="122" text-anchor="middle" fill="#00662A">client <tspan font-weight="bold">Certificate</tspan> (SPIFFE ID in SAN) + <tspan font-weight="bold">CertificateVerify</tspan> + Finished</text>
+    <text x="450" y="156" text-anchor="middle" font-size="10" fill="#5A6A5F">server checks: chains to mesh CA? signature over transcript valid? identity allowed by policy?</text>
+    <line x1="150" y1="180" x2="750" y2="180" stroke="#101B14" stroke-width="2.5"/><text x="450" y="200" text-anchor="middle" font-weight="bold">encrypted app data — both identities cryptographically pinned</text>
+   </g>
+  </svg>
+  <figcaption>FIG 7 — Three additions: CertificateRequest, client Certificate, client CertificateVerify.</figcaption>
+  </figure>
+  <p>The <strong>CertificateVerify</strong> is the part people miss: presenting a cert proves nothing (certs are public). The client signs the <em>entire handshake transcript</em> with its private key — proving possession of the key <em>and</em> binding the proof to <em>this</em> handshake, so it can't be replayed into another session.</p>
+  <div class="whynot"><span class="t">WHY mTLS FOR SERVICES BUT NOT FOR HUMANS?</span>
+  <p>Browsers/humans can't manage client certs (issuance, rotation, revocation across devices is misery), so humans get passwords+MFA+OIDC. Machines are the opposite: they can't remember passwords safely (secrets in env vars leak) but a platform can mint, mount, and rotate certs for them automatically. Auth mechanism follows key-management capability — that's the deep rule.</p></div>
+
+  <h3>Build a working mTLS pair by hand (know the plumbing before automating it)</h3>
+  <pre class="term"><span class="hd">1 · your own CA</span>
+openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:P-256 \
+  -keyout ca.key -out ca.crt -days 365 -nodes -subj "/CN=demo-mesh-ca"
+
+<span class="hd">2 · server cert (SAN is what's verified — CN matching is dead)</span>
+openssl req -newkey ec -pkeyopt ec_paramgen_curve:P-256 -keyout sv.key -out sv.csr \
+  -nodes -subj "/CN=payments"
+openssl x509 -req -in sv.csr -CA ca.crt -CAkey ca.key -CAcreateserial -days 30 \
+  -out sv.crt -extfile &lt;(printf "subjectAltName=DNS:payments.default.svc")
+
+<span class="hd">3 · client cert — identity as a URI SAN, SPIFFE-style</span>
+openssl req -newkey ec -pkeyopt ec_paramgen_curve:P-256 -keyout cl.key -out cl.csr \
+  -nodes -subj "/CN=orders"
+openssl x509 -req -in cl.csr -CA ca.crt -CAkey ca.key -CAcreateserial -days 30 \
+  -out cl.crt -extfile &lt;(printf "subjectAltName=URI:spiffe://demo/ns/default/sa/orders")
+
+<span class="hd">4 · nginx as the mTLS server</span>
+server {
+    listen 443 ssl;
+    ssl_certificate     sv.crt;   ssl_certificate_key sv.key;
+    ssl_client_certificate ca.crt;
+    ssl_verify_client on;                      <span class="c"># the one line that makes it mutual</span>
+    location / { proxy_set_header X-Peer $ssl_client_s_dn; proxy_pass http://127.0.0.1:8080; }
+}
+
+<span class="hd">5 · prove it</span>
+curl https://payments/  --cacert ca.crt                      <span class="c"># → 400: no client cert</span>
+curl https://payments/  --cacert ca.crt --cert cl.crt --key cl.key   <span class="c"># → 200</span></pre>
+
+  <h3>The same thing, mesh-automated</h3>
+  <pre class="term"><span class="hd">istio: two objects = encrypted + authorized fleet</span>
+apiVersion: security.istio.io/v1
+kind: PeerAuthentication
+metadata: {name: default, namespace: prod}
+spec:
+  mtls: {mode: STRICT}          <span class="c"># plaintext to any pod in prod is now refused</span>
+---
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata: {name: payments-callers, namespace: prod}
+spec:
+  selector: {matchLabels: {app: payments}}
+  rules:
+  - from:
+    - source:
+        principals: ["cluster.local/ns/prod/sa/orders"]   <span class="c"># cert SAN, not IP!</span>
+    to:
+    - operation: {methods: ["POST"], paths: ["/charge"]}</pre>
+  <ul>
+    <li><strong>Issuance loop:</strong> Envoy's SDS asks the node agent for a cert → agent creates a key + CSR bound to the pod's <em>ServiceAccount token</em> → istiod validates the token with the K8s API, signs a cert with SAN <code>spiffe://cluster.local/ns/prod/sa/orders</code> → delivered to Envoy in memory (never touches disk). Lifetime ~24 h, rotated at ~half-life, automatically, fleet-wide.</li>
+    <li><strong>Why short-lived certs instead of revocation lists:</strong> CRL/OCSP distribution across 10k proxies is a hard, failure-prone push system; a 24 h expiry makes revocation a <em>default outcome</em> — stop issuing, and the identity dies within a day; kill the SA for instant effect. Short lifetime converts a hard distributed-systems problem into a clock.</li>
+    <li><strong>Why identity = ServiceAccount, not IP:</strong> pod IPs are recycled in seconds — yesterday's <code>payments</code> IP is today's <code>cart</code>. Firewall-by-IP in K8s is guessing; policy written against cryptographic identity survives rescheduling, scaling, and node failure. That is "zero trust" said concretely.</li>
+    <li><strong>Migration reality:</strong> nobody flips STRICT on day one; <code>PERMISSIVE</code> mode accepts both plaintext and mTLS so you can watch the plaintext fraction drop to zero in telemetry, then lock. Mentioning PERMISSIVE→STRICT is how you show you've actually rolled this out.</li>
+  </ul>
+</section>
+<div class="divider"></div>
+
+<!-- ================= 10 DRILL ================= -->
+<section id="drill">
+  <span class="eyebrow">Section 10 · Interview drill</span>
+  <h2>The why-not table: every decision, its rival, its number</h2>
+  <p>Practice format: <em>choice → rejected alternative → the quantitative reason</em>. If you can deliver each row in ~20 seconds, you own the material.</p>
+  <table>
+    <tr><th>We chose</th><th>Instead of</th><th>Because (the number)</th></tr>
+    <tr><td>epoll event loop</td><td>thread per connection</td><td>idle conn ≈ KBs + 0 switches vs ~1 MB stack + µs-scale context switches × 50k conns</td></tr>
+    <tr><td>worker processes = cores</td><td>hundreds of workers</td><td>non-blocking workers already saturate a core; extras only add switching</td></tr>
+    <tr><td>processes over threads</td><td>threaded single process</td><td>crash blast radius = 1/N of connections; zero hot-path locks</td></tr>
+    <tr><td>epoll</td><td>select/poll</td><td>O(ready) vs O(all): 3 events from 50k fds = 3 touched, not 50,000</td></tr>
+    <tr><td>request memory pools</td><td>malloc/free per object</td><td>bump-pointer alloc ≈ ns; whole-pool free; zero fragmentation over months</td></tr>
+    <tr><td>response buffering on</td><td>1:1 streaming</td><td>backend freed in ms instead of held for a 20 s mobile client</td></tr>
+    <tr><td>open-loop load tests (wrk2)</td><td>closed-loop (ab)</td><td>closed-loop hides collapse via coordinated omission; tails understate by 10–100×</td></tr>
+    <tr><td>p99 SLOs</td><td>averages</td><td>50-call fan-out: 1−0.99⁵⁰ ≈ 39% of pages touch the tail</td></tr>
+    <tr><td>leaky bucket at edge</td><td>token bucket</td><td>contract = protect backend from spikes; token bucket is for customer burst quotas</td></tr>
+    <tr><td>local + async-sync rate limits</td><td>Redis INCR per request</td><td>saves 0.5–2 ms/request and 1M ops/s; error bound = sync interval × rate</td></tr>
+    <tr><td>JWT at the edge</td><td>session lookup per request</td><td>~50 µs CPU, zero I/O vs a store RTT on 100% of traffic; revocation via 5–15 min expiry</td></tr>
+    <tr><td>bloom filter reputation</td><td>exact hash set</td><td>10M keys: ~12–18 MB @ p≤1% vs ~1 GB; false positives pay one exact check, negatives impossible</td></tr>
+    <tr><td>graduated response</td><td>instant IP bans</td><td>CGNAT = 10k humans per IP; silent degradation also denies attacker feedback</td></tr>
+    <tr><td>declarative reconciliation</td><td>imperative orchestration</td><td>level-triggered survives missed events; restart controller → re-list → converge</td></tr>
+    <tr><td>IPVS/eBPF at scale</td><td>iptables chains</td><td>O(1) hash vs O(n) linear walk; incremental vs full-table rewrites at 10k services</td></tr>
+    <tr><td>Envoy in the mesh</td><td>nginx everywhere</td><td>xDS live deltas at pod-churn rate vs file-render + worker re-fork per change</td></tr>
+    <tr><td>per-pod sidecar</td><td>per-node proxy</td><td>identity = this service account, not "whoever shares the node" (ambient mode revisits this)</td></tr>
+    <tr><td>24 h certs, auto-rotated</td><td>long certs + CRL/OCSP</td><td>revocation becomes a clock; distributing CRLs to 10k proxies is the harder system</td></tr>
+    <tr><td>identity in cert SANs</td><td>IP allowlists</td><td>pod IPs recycle in seconds; SPIFFE ID survives rescheduling</td></tr>
+    <tr><td>ephemeral ECDHE</td><td>static RSA exchange</td><td>forward secrecy: stolen key ≠ decrypted history</td></tr>
+  </table>
+
+  <h3>Five questions to rehearse out loud</h3>
+  <ol>
+    <li><strong>"Walk me through a request from browser to pod."</strong> Use FIG 0 order: DNS/GSLB → anycast/BGP → L4 ECMP → kernel queues → nginx phases → ingress Service → kube-proxy DNAT → Envoy inbound (mTLS) → localhost app. Name one failure mode per hop.</li>
+    <li><strong>"Design rate limiting for a multi-region API."</strong> Start with the contract (protection vs quota), then layered limits, then local-buckets-plus-async-reconciliation, then the fail-open/fail-closed call.</li>
+    <li><strong>"Nginx is at 90% CPU — go."</strong> user vs sys split → TLS handshake rate (resumption? keepalive?) → flame graph → accept-queue overflow check → only then scale out.</li>
+    <li><strong>"Why is one pod hot behind a Service?"</strong> gRPC over connection-level DNAT → L7 balancing in the sidecar (least-request) fixes it.</li>
+    <li><strong>"How would you inspect AI-bound traffic in this stack?"</strong> An Envoy HTTP filter at the egress/gateway tier: buffer-or-stream trade (§02 buffering tension), cheap pattern pass before expensive ML scoring (§06 pipeline order), fail-policy per route (§05). The whole manual composes into this answer.</li>
+  </ol>
+</section>
+
+<div class="divider"></div>
+
+<!-- ================= 11 TLS INTERCEPTION ================= -->
+<section id="tlsint">
+  <span class="eyebrow r">Section 11 · The gateway in the middle</span>
+  <h2>TLS interception: seeing inside traffic that was designed to be unseeable</h2>
+  <p>Everything so far was a <strong>reverse proxy</strong>: you own the destination, so you own the certificate, so decryption is your right. A secure-access / IA gateway is the opposite animal — a <strong>forward proxy</strong>: your employees and agents talking to <em>other people's</em> servers (openai.com, drive.google.com, a random paste site). TLS was explicitly engineered to stop a middlebox from reading that. So how does an inspection gateway do it legitimately?</p>
+
+  <h3>Break-and-inspect, mechanically</h3>
+  <figure>
+  <svg viewBox="0 0 900 210" role="img" aria-label="TLS break and inspect: two separate TLS sessions with the gateway minting certificates">
+   <g font-size="11" fill="#101B14">
+    <rect x="10" y="70" width="130" height="60" rx="6" fill="#fff" stroke="#101B14" stroke-width="1.5"/><text x="75" y="94" text-anchor="middle">CLIENT</text><text x="75" y="112" text-anchor="middle" font-size="9" fill="#5A6A5F">trusts corp root CA</text>
+    <rect x="330" y="40" width="240" height="120" rx="8" fill="#E9F5EC" stroke="#009639" stroke-width="2"/>
+    <text x="450" y="64" text-anchor="middle" font-weight="bold" fill="#00662A">GATEWAY (sub-CA)</text>
+    <text x="450" y="84" text-anchor="middle" font-size="10">terminates TLS A · inspects</text>
+    <text x="450" y="100" text-anchor="middle" font-size="10">plaintext · originates TLS B</text>
+    <text x="450" y="122" text-anchor="middle" font-size="9" fill="#5A6A5F">mints cert "CN=api.openai.com"</text>
+    <text x="450" y="136" text-anchor="middle" font-size="9" fill="#5A6A5F">signed by corp CA, on the fly</text>
+    <rect x="760" y="70" width="130" height="60" rx="6" fill="#fff" stroke="#101B14" stroke-width="1.5"/><text x="825" y="94" text-anchor="middle">REAL SERVER</text><text x="825" y="112" text-anchor="middle" font-size="9" fill="#5A6A5F">public WebPKI cert</text>
+    <line class="flowline" x1="140" y1="100" x2="328" y2="100" stroke="#009639" stroke-width="2.5"/>
+    <text x="234" y="90" text-anchor="middle" font-size="10" fill="#00662A">TLS session A</text>
+    <line class="flowline" x1="570" y1="100" x2="758" y2="100" stroke="#009639" stroke-width="2.5"/>
+    <text x="664" y="90" text-anchor="middle" font-size="10" fill="#00662A">TLS session B</text>
+    <text x="234" y="180" text-anchor="middle" font-size="10" fill="#5A6A5F">client ↔ gateway keys</text>
+    <text x="664" y="180" text-anchor="middle" font-size="10" fill="#5A6A5F">gateway ↔ server keys · gateway validates WebPKI chain</text>
+   </g>
+  </svg>
+  <figcaption>FIG 8 — There is no "one TLS session being tapped". There are two full sessions and a plaintext gap in the middle — the gap is where every inspection feature lives.</figcaption>
+  </figure>
+  <ol>
+    <li><strong>Trust is pre-installed.</strong> Enterprise device management (MDM) pushes the corporate root CA into every managed device's trust store. This is the entire legal/technical basis: interception only works on devices that opted into the CA. Unmanaged devices get a cert warning — which is the correct outcome.</li>
+    <li><strong>Client connects.</strong> The gateway learns the intended destination from the <strong>SNI</strong> field of the ClientHello (or from explicit-proxy <code>CONNECT api.openai.com:443</code>). It mints — and caches — a leaf certificate for that exact name, signed by the corp CA, and completes TLS session A as if it were the server.</li>
+    <li><strong>Gateway connects outward.</strong> Session B to the real server, where the gateway behaves as a strict client: full WebPKI chain validation, hostname check, minimum TLS version. If the gateway skips this, it has silently downgraded every user's security to nothing — historically the #1 audit finding against inspection middleboxes.</li>
+    <li><strong>Between A and B is plaintext.</strong> Request headers, bodies, prompts, file uploads. This is where §12's pipeline runs.</li>
+  </ol>
+
+  <div class="whynot"><span class="t">WHY DOES CERT PINNING BREAK, AND WHAT'S THE HONEST ANSWER?</span>
+  <p>Apps that pin the exact server key (many banking/first-party mobile apps) reject the minted cert — correctly, from their point of view: the gateway <em>is</em> the attack they were built to detect. There is no clever fix; the operational answer is a <strong>bypass list</strong>: pinned domains are tunneled un-inspected (still logged at SNI/metadata level). Every real deployment is therefore "inspect most, bypass some, log all" — say it that way, because claiming 100% inspection is how you fail the follow-up question.</p></div>
+  <div class="whynot"><span class="t">WHY DOES mTLS-TO-THE-DESTINATION BREAK TOO?</span>
+  <p>If the destination demands a client certificate (§09), the client signs the handshake transcript of session A — but the gateway can't replay that signature into session B (different transcript, by design; that anti-replay property from §09 now works against you). The gateway would need the client's private key, which defeats the point of client keys. So destination-mTLS traffic must be bypassed, or the gateway must hold delegated credentials for the client. Recognizing that §09's CertificateVerify design is exactly what blocks §11's interception is the kind of cross-connection interviewers reward.</p></div>
+
+  <h3>The protocol arms race: where visibility is eroding</h3>
+  <table>
+    <tr><th>Mechanism</th><th>What it hides</th><th>Gateway consequence</th></tr>
+    <tr><td><strong>TLS 1.3</strong></td><td>server certificate now encrypted in-handshake</td><td>can no longer classify by observed server cert; SNI became the only plaintext selector</td></tr>
+    <tr><td><strong>ECH (Encrypted ClientHello)</strong></td><td>encrypts SNI itself</td><td>the last passive selector dies → policy must move to explicit proxy / endpoint agent, or block ECH at egress</td></tr>
+    <tr><td><strong>Session tickets / TLS1.3 PSK resumption</strong></td><td>resumed handshakes skip certificates entirely</td><td>an inspection tier must share ticket keys across the whole fleet (any node may see the resumption), and rotate them — stale ticket keys are also a forward-secrecy hole</td></tr>
+    <tr><td><strong>QUIC / HTTP3</strong></td><td>runs over UDP; transport headers encrypted; no kernel TCP state to piggyback on</td><td>most middleboxes can't parse it → common tactic: block/deprioritize UDP 443 at egress so browsers fall back to TCP+TLS, where the inspection stack works. Honest framing: that's a deliberate, temporary capability gap, not a solution</td></tr>
+    <tr><td><strong>WebSockets / streaming</strong></td><td>long-lived bidirectional frames after one HTTP upgrade</td><td>per-request inspection model breaks; need per-frame/stateful scanning (leads into §12 streaming design)</td></tr>
+  </table>
+  <div class="keyline"><span class="t">THE STRATEGIC POINT</span>
+  <p>Network-only inspection is a shrinking window; endpoint-only agents miss unmanaged paths and are OS-fragile. Real architectures are a pincer: endpoint client (sees plaintext before encryption, attests device) + cloud gateway (uniform policy, sees everything routed through it) + identity plane (§13) tying both together. Any single-layer answer is the wrong answer.</p></div>
+</section>
+<div class="divider"></div>
+
+<!-- ================= 12 INSPECTION PIPELINE ================= -->
+<section id="inspect">
+  <span class="eyebrow r">Section 12 · Inside the plaintext gap</span>
+  <h2>The content inspection pipeline: Aho-Corasick first, ML second</h2>
+  <p>You now have plaintext (from §11's gap, or natively at a reverse proxy). Budget: a few milliseconds per request, at hundreds of thousands of requests per second, scanning for thousands of things at once — DLP patterns, credentials, malware signatures, prompt-injection markers, tenant-specific keywords. The architecture that survives this budget is always the same shape: <strong>a cheap deterministic stage that touches every byte, gating an expensive probabilistic stage that touches few</strong>. Same law as §06's pipeline ordering, applied inside one request.</p>
+
+  <h3>Stage 1: multi-pattern matching — why Aho-Corasick</h3>
+  <p>Naive approach: run 5,000 patterns as 5,000 regex/string searches → cost is O(patterns × text). At 5k patterns over a 100 KB body that's dead on arrival. Aho-Corasick (1975, and still what powers Snort/DLP engines) matches <em>all</em> patterns in <strong>one pass over the text, O(text + matches)</strong> — cost is independent of pattern count.</p>
+  <figure>
+  <svg viewBox="0 0 900 250" role="img" aria-label="Aho-Corasick trie with failure links for patterns he, she, his, hers">
+   <g font-size="12" fill="#101B14">
+    <circle cx="80" cy="125" r="20" fill="#101B14"/><text x="80" y="130" text-anchor="middle" fill="#fff">root</text>
+    <circle cx="220" cy="60" r="18" fill="#fff" stroke="#101B14" stroke-width="1.5"/><text x="220" y="65" text-anchor="middle">h</text>
+    <circle cx="360" cy="40" r="18" fill="#E9F5EC" stroke="#009639" stroke-width="2"/><text x="360" y="45" text-anchor="middle">e</text>
+    <circle cx="500" cy="40" r="18" fill="#E9F5EC" stroke="#009639" stroke-width="2"/><text x="500" y="45" text-anchor="middle">r+s</text>
+    <circle cx="360" cy="95" r="18" fill="#E9F5EC" stroke="#009639" stroke-width="2"/><text x="360" y="100" text-anchor="middle">i+s</text>
+    <circle cx="220" cy="185" r="18" fill="#fff" stroke="#101B14" stroke-width="1.5"/><text x="220" y="190" text-anchor="middle">s</text>
+    <circle cx="360" cy="185" r="18" fill="#fff" stroke="#101B14" stroke-width="1.5"/><text x="360" y="190" text-anchor="middle">h</text>
+    <circle cx="500" cy="185" r="18" fill="#E9F5EC" stroke="#009639" stroke-width="2"/><text x="500" y="190" text-anchor="middle">e</text>
+    <line x1="100" y1="115" x2="202" y2="68" stroke="#101B14" stroke-width="1.5"/>
+    <line x1="238" y1="55" x2="342" y2="43" stroke="#101B14" stroke-width="1.5"/>
+    <line x1="378" y1="40" x2="482" y2="40" stroke="#101B14" stroke-width="1.5"/>
+    <line x1="236" y1="70" x2="343" y2="90" stroke="#101B14" stroke-width="1.5"/>
+    <line x1="100" y1="135" x2="202" y2="178" stroke="#101B14" stroke-width="1.5"/>
+    <line x1="238" y1="185" x2="342" y2="185" stroke="#101B14" stroke-width="1.5"/>
+    <line x1="378" y1="185" x2="482" y2="185" stroke="#101B14" stroke-width="1.5"/>
+    <path d="M 495 172 C 440 120 400 90 375 52" fill="none" stroke="#C43D3D" stroke-width="1.6" stroke-dasharray="5 4"/>
+    <path d="M 352 172 C 300 140 260 100 234 74" fill="none" stroke="#C43D3D" stroke-width="1.6" stroke-dasharray="5 4"/>
+    <text x="620" y="55" font-size="11" fill="#00662A">green = a pattern ends here (output)</text>
+    <text x="620" y="80" font-size="11" fill="#C43D3D">red dashed = failure links:</text>
+    <text x="620" y="100" font-size="11" fill="#C43D3D">"longest suffix that is also a prefix"</text>
+    <text x="620" y="130" font-size="11">patterns: he · she · his · hers</text>
+    <text x="620" y="155" font-size="11">scanning "she": after s-h-e we are at</text>
+    <text x="620" y="175" font-size="11">she✓ — failure link says we're ALSO</text>
+    <text x="620" y="195" font-size="11">inside "he"✓ — both reported, no rescan</text>
+   </g>
+  </svg>
+  <figcaption>FIG 9 — All patterns compiled into one trie; failure links let the scanner recover from a mismatch without ever moving backwards in the input.</figcaption>
+  </figure>
+  <ul>
+    <li><strong>Build (offline, once per ruleset):</strong> insert all patterns into a trie; BFS to compute each node's <em>failure link</em> = the node for the longest proper suffix of the current path that is also some pattern's prefix. Merge output sets along failure chains.</li>
+    <li><strong>Scan (hot path):</strong> for each input byte, follow the goto edge; on mismatch, hop failure links until one matches (amortized O(1) — you can never fail back more than you advanced). Emit outputs at marked nodes. The text pointer <em>never moves backwards</em> — which is exactly the property that makes streaming (below) possible.</li>
+    <li><strong>Memory shape matters more than big-O:</strong> a dense 256-way goto table per node is fastest but fat; production engines (Hyperscan-class) compress states and use SIMD to chew multiple bytes per cycle. The interview-level point: stage 1 is memory-bandwidth-bound, not CPU-logic-bound.</li>
+  </ul>
+  <div class="whynot"><span class="t">WHY NOT ONE GIANT REGEX, OR 5,000 SMALL ONES?</span>
+  <p>5,000 separate scans = 5,000 passes over every byte. One combined regex compiled to a DFA <em>is</em> essentially Aho-Corasick generalized — but naive regex engines (backtracking, PCRE-style) have exponential worst cases, and a hostile payload that triggers catastrophic backtracking is a <strong>ReDoS attack on the inspector itself</strong> — your security layer becomes the DoS vector. Deterministic-automaton matching has a hard per-byte cost ceiling regardless of input. Rule: on a hostile-input hot path, only algorithms with adversary-independent worst cases.</p></div>
+
+  <h3>Stage 2: the ML pass — and the gate between the stages</h3>
+  <ul>
+    <li><strong>What stage 1 can't see:</strong> paraphrased exfiltration, novel prompt injection ("ignore previous instructions" has infinite rewordings), intent. That needs a classifier — transformer-scale, ~1–50 ms on accelerators, thousands of times costlier per byte than stage 1.</li>
+    <li><strong>The gate:</strong> stage 1's verdict + cheap features (destination category from §11 SNI, user risk tier from §13, content type, entropy — high-entropy blobs are keys/ciphertext) decide: <em>pass / block / escalate to stage 2</em>. Only a few percent of traffic should ever reach the model. If 100% does, the design has failed regardless of model quality.</li>
+    <li><strong>Placement:</strong> in Envoy terms this is an <code>ext_proc</code>/WASM HTTP filter streaming body chunks to a scoring service over gRPC — the same shape as §05's <code>ext_authz</code>, generalized from headers to bodies.</li>
+  </ul>
+
+  <h3>The streaming problem: scanning what you refuse to buffer</h3>
+  <p>§02 set up this tension: inspection wants the full body; LLM token streams and uploads want zero added latency. The resolution:</p>
+  <div class="card">
+    <p><strong>Chunk-wise scanning with carried state.</strong> Aho-Corasick's state is just "current node" — carry it across chunks and patterns spanning a chunk boundary match for free (no overlap-window hacks needed; that's a hidden superpower of automaton matching). ML stage runs on a <strong>sliding window with overlap</strong> (e.g., score every 2 KB with 256-byte overlap) since classifiers do need context windows.</p>
+    <p><strong>Verdict timing is a policy, not an afterthought:</strong> (a) <em>hold-and-release</em> per chunk — adds one scoring latency to time-to-first-byte, then pipelines; (b) <em>stream-and-kill</em> — forward optimistically, terminate mid-stream on a late positive; some bytes escape but the session, key, and user are burned; (c) <em>async-audit</em> — full speed, detection feeds response after the fact. Map: (a) uploads/DLP where escaped bytes = incident; (b) interactive AI responses; (c) low-risk categories. Naming which routes get which mode is the staff-level move.</p>
+  </div>
+  <div class="whynot"><span class="t">WHY NOT "JUST BUFFER EVERYTHING, LATENCY IS ONLY MILLISECONDS"?</span>
+  <p>Three compounding costs. <em>Memory:</em> 100k concurrent streams × 1 MB buffers = 100 GB hot RAM per tier. <em>UX:</em> an LLM answer streams over ~10+ seconds; full buffering turns perceived latency from 300 ms-to-first-token into the entire duration. <em>Attack surface:</em> unbounded buffering is a memory-exhaustion primitive — attackers open streams and drip bytes (§06's slowloris, now aimed at your inspector). Every buffer in a hostile-facing system needs a byte cap and a time cap, and the design must define what happens at the cap.</p></div>
+</section>
+<div class="divider"></div>
+
+<!-- ================= 13 AGENTIC + CAE ================= -->
+<section id="agentic">
+  <span class="eyebrow r">Section 13 · The new client</span>
+  <h2>Agentic traffic and continuous access: when the "user" is software</h2>
+  <p>Every model so far quietly assumed a human behind the request: bursty arrival patterns (§06), interactive login (§05), sessions that end when someone sleeps. AI agents break each assumption: they run 24/7, fan one instruction into hundreds of API calls, hold tokens far longer than any human session, and chain identities ("user asked agent, agent calls tool, tool calls API — <em>who</em> is this request?"). A gateway that can't answer that question can't police it.</p>
+
+  <h3>Telling agents from humans (and from bots)</h3>
+  <table>
+    <tr><th>Signal</th><th>Human</th><th>Sanctioned agent</th><th>Why it's hard to fake</th></tr>
+    <tr><td>Inter-arrival timing</td><td>bursty, pauses, circadian</td><td>metronomic or instant fan-out</td><td>faking human cadence costs the agent its speed — its whole value</td></tr>
+    <tr><td>TLS/HTTP fingerprint (§06 JA3/JA4)</td><td>browser stacks</td><td>SDK/runtime stacks</td><td>swapping TLS stacks is expensive; UA strings are free lies</td></tr>
+    <tr><td>Session shape</td><td>login → work → expire</td><td>long-lived refresh loops, retries with exact backoff curves</td><td>retry jitter algorithms are library signatures</td></tr>
+    <tr><td>Call graph</td><td>page-shaped bundles</td><td>tool-call shaped: list→read→write chains, MCP/function-call endpoints</td><td>the destination set itself (model APIs, tool servers) is the tell</td></tr>
+    <tr><td>Declared identity</td><td>user token</td><td><em>should be</em> a distinct workload/agent identity</td><td>this is policy, not detection — the point of the next part</td></tr>
+  </table>
+  <div class="whynot"><span class="t">WHY IS "SHADOW AI" A DISCOVERY PROBLEM BEFORE A BLOCKING PROBLEM?</span>
+  <p>Blocking known AI domains on day one just teaches employees to use unknown ones — you convert visible risk into invisible risk. The correct sequence mirrors §09's PERMISSIVE→STRICT: <strong>observe</strong> (classify destinations via §11 SNI/inspection, inventory who talks to what) → <strong>grade</strong> (sanctioned / tolerated / forbidden per destination × data-sensitivity from §12) → <strong>enforce gradually</strong> with sanctioned alternatives in place. Same migration shape, third time it's appeared — that's not coincidence, it's how you change any live system safely.</p></div>
+
+  <h3>Identity chains: on-behalf-of, not shared secrets</h3>
+  <figure>
+  <svg viewBox="0 0 900 190" role="img" aria-label="Token exchange chain from user to agent to tool with narrowing scopes">
+   <g font-size="11" fill="#101B14">
+    <rect x="10" y="60" width="130" height="60" rx="6" fill="#fff" stroke="#101B14" stroke-width="1.5"/><text x="75" y="84" text-anchor="middle">USER</text><text x="75" y="102" text-anchor="middle" font-size="9" fill="#5A6A5F">token: scope=mail.*</text>
+    <rect x="250" y="60" width="150" height="60" rx="6" fill="#E9F5EC" stroke="#009639" stroke-width="2"/><text x="325" y="84" text-anchor="middle">AGENT</text><text x="325" y="102" text-anchor="middle" font-size="9" fill="#00662A">OBO token: user+agent, scope=mail.read</text>
+    <rect x="510" y="60" width="150" height="60" rx="6" fill="#E9F5EC" stroke="#009639" stroke-width="2"/><text x="585" y="84" text-anchor="middle">TOOL / MCP</text><text x="585" y="102" text-anchor="middle" font-size="9" fill="#00662A">exchanged again: narrower, minutes TTL</text>
+    <rect x="760" y="60" width="130" height="60" rx="6" fill="#fff" stroke="#101B14" stroke-width="1.5"/><text x="825" y="84" text-anchor="middle">RESOURCE API</text><text x="825" y="102" text-anchor="middle" font-size="9" fill="#5A6A5F">sees full actor chain</text>
+    <line class="flowline" x1="140" y1="90" x2="248" y2="90" stroke="#009639" stroke-width="2"/>
+    <line class="flowline" x1="400" y1="90" x2="508" y2="90" stroke="#009639" stroke-width="2"/>
+    <line class="flowline" x1="660" y1="90" x2="758" y2="90" stroke="#009639" stroke-width="2"/>
+    <text x="450" y="160" text-anchor="middle" font-size="10" fill="#5A6A5F">each hop: token EXCHANGED at the IdP (RFC 8693), scopes can only narrow, act-as chain recorded in claims</text>
+   </g>
+  </svg>
+  <figcaption>FIG 10 — Delegation done right: every hop swaps its token for a narrower one; nothing downstream ever holds the user's full power.</figcaption>
+  </figure>
+  <ul>
+    <li><strong>The anti-pattern:</strong> pasting a user's long-lived API key into an agent. Now an autonomous, prompt-injectable program (§12) holds full user power indefinitely, and logs can't distinguish agent actions from the human's.</li>
+    <li><strong>The pattern:</strong> the agent is a first-class principal (its own §09-style workload identity) that performs <strong>token exchange / on-behalf-of</strong>: presents the user's token + its own credential to the IdP, receives a token whose claims say "actor = agent, subject = user, scope = the narrow thing being done, TTL = minutes". Audit, rate limits (§04 — per <em>agent</em> quotas, since one agent equals hundreds of humans in RPS), and blast radius all follow from the token shape.</li>
+  </ul>
+
+  <h3>CAE: killing the token you already issued</h3>
+  <p>§05's compromise was "short expiry ≈ revocation". Agents strain it: they refresh forever, so a compromised agent self-renews indefinitely; and even a 15-minute window is long for a machine doing thousands of ops/minute. <strong>Continuous Access Evaluation</strong> upgrades the model from timer-based to event-based:</p>
+  <div class="card">
+    <ol>
+      <li>Resource providers and gateways subscribe to IdP <strong>revocation events</strong>: user disabled, password reset, refresh revoked, device fell out of compliance, impossible-travel / risk signal fired.</li>
+      <li>On event, the provider drops affected sessions <em>now</em> — mid-token-lifetime — and answers subsequent calls with a claims challenge (<code>401 + insufficient_claims</code>) forcing re-authentication against current policy.</li>
+      <li>Tokens carry a claim advertising CAE capability, so providers know this client can handle mid-life invalidation instead of retry-looping.</li>
+    </ol>
+    <p style="margin-top:8px">Extended universally ("Universal CAE"), the same event channel reaches every session type — including long-lived agent and streaming sessions from §12 — so one HR action or one anomaly verdict propagates to <em>everything</em> that principal holds, in near-real-time, without shrinking token TTLs to absurdity.</p>
+  </div>
+  <div class="whynot"><span class="t">WHY EVENTS + MODERATE TTLs, NOT JUST 60-SECOND TOKENS?</span>
+  <p>Ultra-short TTLs turn the IdP into a per-minute dependency of every service on earth — its availability now gates all traffic (§04's sync-Redis mistake, replayed with identity), and token-issuance load scales with fleet size × 1/TTL. Events invert it: quiet by default, targeted invalidation on signal, IdP load proportional to <em>incidents</em> not traffic. It's the same asymmetry as §06 (cheap default path, expensive path only on suspicion) — by now you can predict the architecture from the cost structure alone.</p></div>
+
+  <div class="keyline"><span class="t">CLOSING SYNTHESIS — ONE PARAGRAPH TO RULE THE INTERVIEW</span>
+  <p>"An IA gateway is the composition of everything above: an event-loop data plane (§02/§08) terminating or brokering TLS (§09/§11), shedding hostile load through layered, mostly-local admission control (§04/§06), running a cheap-then-expensive inspection pipeline over streaming bodies (§12), keyed on chained, event-revocable identities rather than IPs or timers (§05/§13) — deployed as a reconciled fleet (§07) whose every design choice is the same trade, made repeatedly: bounded cost on the hot path, expensive certainty only where signals justify it."</p></div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ================= 14 METAL ================= -->
+<section id="metal">
+  <span class="eyebrow">Section 14 · ALT 1 CM, data plane</span>
+  <h2>Down to the metal: where the next 10× lives after config tuning</h2>
+  <p>§03 tuned nginx. This section is what you do when the config is already perfect and the graphs say the machine itself is the ceiling. The unifying theme: at millions of packets per second, the enemy is <strong>per-packet fixed costs</strong> — syscall crossings, interrupts, memory copies, cache misses — not algorithmic work.</p>
+
+  <h3>Know your unit costs (memorize this table)</h3>
+  <table>
+    <tr><th>Operation</th><th>Approx cost</th><th>At 1M ops/sec that's</th></tr>
+    <tr><td>L1 cache hit</td><td>~1 ns</td><td>negligible</td></tr>
+    <tr><td>Main-memory (cache miss)</td><td>~100 ns</td><td>10% of a core</td></tr>
+    <tr><td>Syscall crossing (post-Spectre mitigations)</td><td>~0.5–2 µs</td><td>0.5–2 full cores</td></tr>
+    <tr><td>Context switch</td><td>~1–5 µs + cache pollution</td><td>1–5+ cores</td></tr>
+    <tr><td>memcpy 4 KB</td><td>~200–400 ns</td><td>0.2–0.4 cores</td></tr>
+    <tr><td>Same-AZ network RTT</td><td>~0.5 ms</td><td>—(latency, not CPU)</td></tr>
+    <tr><td>ECDSA sign (TLS handshake)</td><td>~100 µs–1 ms CPU</td><td>why §03 obsessed over resumption</td></tr>
+  </table>
+  <p>Every technique below is just an attack on one row of this table. Say which row, and the technique explains itself.</p>
+
+  <h3>Fewer crossings: batching and io_uring</h3>
+  <ul>
+    <li><strong>Batching is everywhere already:</strong> epoll returns up to 512 events per wakeup (§02's loop) — one syscall amortized over hundreds of sockets. NIC interrupt coalescing + NAPI polling do the same below the kernel: under load, Linux stops taking one interrupt per packet and polls the ring buffer.</li>
+    <li><strong>io_uring</strong> goes further: two shared-memory ring buffers (submission + completion) between app and kernel. You write operation descriptors into the ring — read this, write that, accept there — and the kernel consumes them, posting completions back, potentially with <em>zero syscalls in steady state</em> (kernel-side polling mode). It also makes disk I/O genuinely async, closing the one blocking hole §02 needed <code>aio threads</code> for. This is a <em>completion</em> model (like Windows IOCP) vs epoll's <em>readiness</em> model — "tell me when it's done" vs "tell me when I can try".</li>
+  </ul>
+  <div class="whynot"><span class="t">WHY DIDN'T READINESS MODELS DIE THE DAY io_uring SHIPPED?</span>
+  <p>Because the syscall row of the cost table only dominates for <em>small-op, high-rate</em> workloads. A proxy pushing 100 KB responses spends its time in memcpy and TLS, not crossings — switching to io_uring moves single-digit percents. A workload doing millions of tiny ops/sec (or heavy mixed disk+net I/O) can gain 2×. Also: a decade of battle-tested epoll code, and io_uring's fast-evolving surface has had real security findings — kernel attack surface is a cost too. Adopt where the row you're attacking is actually your biggest row. That sentence is the whole engineering discipline of this section.</p></div>
+
+  <h3>Fewer copies: zero-copy end to end</h3>
+  <ul>
+    <li><strong>sendfile</strong> (§02): file → socket without userspace. But it breaks the moment you must transform bytes — including TLS encryption. Enter…</li>
+    <li><strong>kTLS:</strong> after the handshake (still done in userspace OpenSSL), the session keys are pushed into the kernel; the kernel (or the NIC itself, with TLS offload hardware) encrypts during transmission. Now <code>sendfile</code> over TLS works — file → kernel encrypt → wire, zero userspace touches. Large-object serving (video, model weights, artifact registries) sees double-digit CPU savings.</li>
+    <li><strong>MSG_ZEROCOPY / RX zero-copy:</strong> pin user pages and let the NIC DMA directly — worth it above ~10 KB per send (page-pinning bookkeeping eats the win below that; the kernel documents exactly this threshold behavior).</li>
+  </ul>
+
+  <h3>Fewer kernels: XDP, eBPF, DPDK</h3>
+  <figure>
+  <svg viewBox="0 0 900 230" role="img" aria-label="Packet path showing XDP, kernel stack, and DPDK bypass options">
+   <g font-size="11" fill="#101B14">
+    <rect x="10" y="90" width="110" height="50" rx="6" fill="#fff" stroke="#101B14" stroke-width="1.5"/><text x="65" y="119" text-anchor="middle">NIC</text>
+    <rect x="180" y="20" width="200" height="50" rx="6" fill="#FBEDED" stroke="#C43D3D" stroke-width="1.5"/><text x="280" y="41" text-anchor="middle">XDP (eBPF at driver)</text><text x="280" y="58" text-anchor="middle" font-size="9" fill="#C43D3D">DROP/PASS/TX before skb exists</text>
+    <rect x="180" y="90" width="200" height="50" rx="6" fill="#F7FAF6" stroke="#5A6A5F" stroke-width="1.5"/><text x="280" y="111" text-anchor="middle">kernel TCP/IP stack</text><text x="280" y="128" text-anchor="middle" font-size="9" fill="#5A6A5F">sk_buff · netfilter · sockets</text>
+    <rect x="180" y="160" width="200" height="50" rx="6" fill="#EDF2FD" stroke="#326CE5" stroke-width="1.5"/><text x="280" y="181" text-anchor="middle">DPDK userspace driver</text><text x="280" y="198" text-anchor="middle" font-size="9" fill="#1F4CB0">poll-mode · kernel never sees pkt</text>
+    <rect x="460" y="90" width="180" height="50" rx="6" fill="#E9F5EC" stroke="#009639" stroke-width="2"/><text x="550" y="111" text-anchor="middle" fill="#00662A">nginx / envoy</text><text x="550" y="128" text-anchor="middle" font-size="9" fill="#00662A">epoll sockets (§02)</text>
+    <rect x="460" y="160" width="180" height="50" rx="6" fill="#EDF2FD" stroke="#326CE5" stroke-width="1.5"/><text x="550" y="181" text-anchor="middle">custom L4 LB app</text><text x="550" y="198" text-anchor="middle" font-size="9" fill="#1F4CB0">own TCP/flow logic</text>
+    <line class="flowline" x1="120" y1="105" x2="178" y2="50" stroke="#C43D3D" stroke-width="2"/>
+    <line class="flowline" x1="120" y1="115" x2="178" y2="115" stroke="#5A6A5F" stroke-width="2"/>
+    <line class="flowline" x1="120" y1="125" x2="178" y2="185" stroke="#326CE5" stroke-width="2"/>
+    <line class="flowline" x1="380" y1="115" x2="458" y2="115" stroke="#009639" stroke-width="2"/>
+    <line class="flowline" x1="380" y1="185" x2="458" y2="185" stroke="#326CE5" stroke-width="2"/>
+    <line class="flowline" x1="280" y1="70" x2="280" y2="88" stroke="#5A6A5F" stroke-width="1.5"/>
+    <text x="720" y="45" font-size="10" fill="#C43D3D">§06's "drop known-bad at ~ns" lives here</text>
+    <text x="720" y="115" font-size="10" fill="#5A6A5F">default path — fine for L7</text>
+    <text x="720" y="185" font-size="10" fill="#1F4CB0">L4 LBs, DDoS scrubbers, 100Gbps+</text>
+   </g>
+  </svg>
+  <figcaption>FIG 11 — Three altitudes for packet processing. The trick is putting each function at the lowest layer that can express it.</figcaption>
+  </figure>
+  <div class="whynot"><span class="t">WHY XDP FOR THE BLOCKLIST BUT NOT FOR THE PROXY?</span>
+  <p>XDP programs are verified eBPF: bounded loops, limited memory (maps), no blocking — perfect for "hash the source IP, check a map, DROP" at tens of millions of pps per core, useless for TLS or HTTP parsing. DPDK gives you everything — and takes everything: you now own a userspace TCP stack, poll-mode cores pinned at 100% forever, and you've left behind the kernel's ecosystem (tcpdump, netfilter, sockets). That's justified for a Maglev/Katran-class L4 balancer shared by a whole datacenter; it's malpractice for an app team. Notice the layering resolves §06's pipeline: XDP drop → kernel SYN cookies → nginx limits → app. Each function at the cheapest layer that can express it.</p></div>
+
+  <h3>Memory locality: NUMA, RSS, and false sharing</h3>
+  <ul>
+    <li><strong>RSS/RPS:</strong> the NIC hashes each flow's 5-tuple to a queue, each queue interrupts a fixed CPU — so one connection's packets always land on the same core, keeping its state hot in that core's cache. This is §02's per-core worker model extended down into silicon; <code>reuseport</code> + IRQ affinity align the whole path NIC-queue → CPU → worker.</li>
+    <li><strong>NUMA:</strong> a 2-socket box is two computers with a fast link. Cross-socket memory access costs ~1.5–2×, and a NIC is physically attached to one socket. Serious deployments run one nginx/envoy "instance-worth" of workers per socket, memory-local. Symptom of getting it wrong: mysteriously bimodal latency histograms.</li>
+    <li><strong>False sharing:</strong> two counters on the same 64-byte cache line, updated by different cores, ping-pong the line between caches — a "lock-free" stats array can serialize the whole fleet of cores. Fix: pad hot per-core counters to line size, aggregate on read. This is why nginx shm zones (§04) and Envoy stats are structured per-worker with periodic merge, not shared atomics per event.</li>
+  </ul>
+</section>
+<div class="divider"></div>
+
+<!-- ================= 15 RESILIENCE ================= -->
+<section id="resil">
+  <span class="eyebrow">Section 15 · When it breaks</span>
+  <h2>Resilience: designing for the day the graphs go vertical</h2>
+  <p>Fast systems die differently than slow ones: they die by <strong>positive feedback loops</strong>. A small slowdown triggers retries, retries add load, load adds slowdown. Every pattern in this section exists to break one specific loop. Learn them as loop-breakers and you'll never mix them up again.</p>
+
+  <h3>Anatomy of a cascading failure (the canonical incident)</h3>
+  <figure>
+  <svg viewBox="0 0 900 170" role="img" aria-label="Cascading failure feedback loop">
+   <g font-size="11" fill="#101B14">
+    <rect x="20" y="55" width="150" height="55" rx="6" fill="#fff" stroke="#101B14" stroke-width="1.5"/><text x="95" y="79" text-anchor="middle">DB p99 doubles</text><text x="95" y="96" text-anchor="middle" font-size="9" fill="#5A6A5F">(one bad query plan)</text>
+    <rect x="220" y="55" width="150" height="55" rx="6" fill="#fff" stroke="#101B14" stroke-width="1.5"/><text x="295" y="79" text-anchor="middle">app threads pile up</text><text x="295" y="96" text-anchor="middle" font-size="9" fill="#5A6A5F">concurrency = rate×latency</text>
+    <rect x="420" y="55" width="150" height="55" rx="6" fill="#FBEDED" stroke="#C43D3D" stroke-width="1.5"/><text x="495" y="79" text-anchor="middle">timeouts fire</text><text x="495" y="96" text-anchor="middle" font-size="9" fill="#C43D3D">clients retry ×3</text>
+    <rect x="620" y="55" width="150" height="55" rx="6" fill="#FBEDED" stroke="#C43D3D" stroke-width="1.5"/><text x="695" y="79" text-anchor="middle">load now 3–4×</text><text x="695" y="96" text-anchor="middle" font-size="9" fill="#C43D3D">healthy pods drown too</text>
+    <line class="flowline" x1="170" y1="82" x2="218" y2="82" stroke="#C43D3D" stroke-width="2"/>
+    <line class="flowline" x1="370" y1="82" x2="418" y2="82" stroke="#C43D3D" stroke-width="2"/>
+    <line class="flowline" x1="570" y1="82" x2="618" y2="82" stroke="#C43D3D" stroke-width="2"/>
+    <path class="flowline" d="M 695 110 C 695 150 95 150 95 112" fill="none" stroke="#C43D3D" stroke-width="2"/>
+    <text x="400" y="145" text-anchor="middle" font-size="10" fill="#C43D3D">feedback: extra load makes the DB slower still → repeat until 0% success at 400% load</text>
+   </g>
+  </svg>
+  <figcaption>FIG 12 — Little's Law (concurrency = arrival rate × latency) is the physics; retries are the accelerant.</figcaption>
+  </figure>
+  <p>End state of an unprotected system: every server busy doing work that will time out before it's used — 100% utilization, 0% goodput, and it <em>stays there even after the DB recovers</em> because the retry backlog sustains the overload. This is a metastable failure; recovery requires shedding load, not adding capacity.</p>
+
+  <h3>The loop-breakers, each matched to its loop</h3>
+  <ul>
+    <li><strong>Timeouts with a deadline budget.</strong> Not "30 s everywhere" — a per-request deadline set at the edge and <em>propagated</em> (gRPC deadline / header) so a call 5 hops deep knows only 80 ms remain and gives up instead of doing doomed work. Rule: your timeout ≥ dependency's p99.9, and inner timeouts strictly shorter than outer — inverted nesting means the outer layer retries while the inner call still runs: hidden load multiplication.</li>
+    <li><strong>Retries under a budget, with jittered backoff.</strong> Retry only idempotent ops, only on transient signals; exponential backoff spreads them in time; <em>full jitter</em> (uniform 0..backoff) spreads them so recovered servers aren't hit by a synchronized thundering herd. The crucial fleet-level control is a <strong>retry budget</strong> (Envoy: e.g. retries ≤ 20% of active requests): 3-attempts-each is per-caller and multiplies through layers (3 hops × 3 attempts = up to 27× at the bottom); a budget caps the multiplier globally.</li>
+    <li><strong>Circuit breakers.</strong> When a dependency's failure rate crosses a threshold, stop calling it entirely (open); after a cooldown, probe with a trickle (half-open); resume on success (closed). Breaks the "keep paying timeout-latency for guaranteed failures" loop and gives the dependency air to recover. Envoy splits this into connection/request/pending caps ("circuit breakers") plus <em>outlier ejection</em> (per-endpoint 5xx tracking, §08) — mention both to show you've read the actual knobs.</li>
+    <li><strong>Load shedding at admission.</strong> The gateway's version of triage: when queue depth / concurrency crosses the knee (§03), reject excess <em>immediately with 429/503 + Retry-After</em>. A fast no costs microseconds; a slow yes that times out costs the full work plus a retry. Shed by <strong>criticality class</strong>: checkout traffic survives, batch/scraper/optional-personalization traffic sheds first — which requires you to have labeled request criticality in advance (do that; almost nobody does until their second outage).</li>
+    <li><strong>Backpressure.</strong> Bounded queues everywhere, and when a queue fills, the fullness propagates <em>upstream</em> (TCP flow control, HTTP/2 window, or explicit rejection) instead of buffering unboundedly. §12's buffer caps were this; an unbounded queue is a promise to fail with OOM later instead of a 503 now.</li>
+  </ul>
+  <div class="whynot"><span class="t">WHY IS "JUST AUTOSCALE" NOT THE ANSWER TO OVERLOAD?</span>
+  <p>Timing and direction. Scale-out takes minutes (image pull, warm-up, cache fill — §07); cascades develop in seconds. Worse, cold pods start at their <em>slowest</em> (empty caches, JIT, unopened connection pools), so the autoscaler adds capacity that initially lowers fleet-average performance — and if scaling triggered on latency, that's another positive feedback loop (slow → scale → slower → scale more). Autoscaling handles diurnal traffic shape; shedding+breakers handle transients. You need both; they operate on different timescales.</p></div>
+  <div class="whynot"><span class="t">WHY DEGRADE INSTEAD OF FAIL — AND WHY MUST DEGRADATION BE DESIGNED, NOT IMPROVISED?</span>
+  <p>Serve-stale beats serve-error: cached prices 90 s old, recommendations replaced by bestsellers, search without personalization — users barely notice, revenue survives. But each fallback is itself code with its own failure modes, and it runs precisely when the system is sickest — untested fallbacks are where second outages live (the fallback path stampedes the very dependency that's down, classically). So: fallbacks are declared per route ("this endpoint may serve stale up to X"), and exercised continuously (chaos drills / fallback-always cells), or they don't exist.</p></div>
+
+  <h3>Deployment resilience: assume the bug ships</h3>
+  <p>Most incidents are self-inflicted by change. The gateway stack is also the safety mechanism: <strong>canary</strong> via §08 traffic-split (1% → compare error/latency vs baseline automatically → promote or auto-rollback); <strong>cell-based isolation</strong> — partition the fleet into independent cells, each with its own gateways/limiters/state, deploy cell-by-cell so blast radius is 1/N of users and a poisoned config (§02's reload makes config a deploy too!) can't take the world down; <strong>feature flags</strong> for instant behavioral rollback without a rollout. Config and rulesets (§12's patterns, §06's blocklists) need the same canary treatment as code — a bad regex pushed globally <em>is</em> the outage.</p>
+</section>
+<div class="divider"></div>
+
+<!-- ================= 16 OBSERVABILITY ================= -->
+<section id="obs">
+  <span class="eyebrow">Section 16 · Seeing it run</span>
+  <h2>Observability: measuring a billion requests without a second billion-request problem</h2>
+  <p>Instrumentation at scale has one central tension: <strong>the telemetry system's load scales with the traffic it watches</strong>. Every design below is a different answer to "how do we know everything while storing almost nothing?"</p>
+
+  <h3>Metrics: the cardinality trap</h3>
+  <div class="card">
+    <p><strong>The trap, numerically.</strong> A time series is a metric name × its label combination. <code>http_requests{route, code, pod}</code> with 200 routes × 8 codes × 500 pods = 800k series — fine. Add <code>user_id</code> as a label and it's 800k × active users = billions of series: the TSDB dies of RAM, not disk. Rule: <strong>labels are for dimensions you'd group by on a dashboard (bounded, low-cardinality); identities go in logs and traces, never in metrics.</strong> Half of all real-world monitoring outages are someone adding one unbounded label.</p>
+    <p><strong>Histograms, not averages, not client-computed percentiles.</strong> You cannot average percentiles across pods (p99 of pod A + p99 of pod B ≠ fleet p99 — percentiles don't compose). So each pod exports <em>bucket counters</em> (histogram); bucket counts <em>do</em> sum across the fleet, and the query side derives any percentile from the merged distribution. That's why Prometheus histograms/OTel exponential histograms exist, and it's a beautiful example of choosing the exportable representation so the math composes.</p>
+    <p><strong>Pull + local aggregation.</strong> §14's per-core counters merge per-pod; scrape carries pre-aggregated snapshots every 15–60 s. Cost is O(series), independent of RPS — the whole point.</p>
+  </div>
+
+  <h3>Tracing: the request's own story</h3>
+  <ul>
+    <li><strong>Mechanics:</strong> the edge mints a trace ID; every hop creates a span (name, start, duration, parent) and <em>propagates context</em> in headers (W3C <code>traceparent</code>). The sidecar (§08) creates spans for free at every hop boundary — but the <em>app</em> must copy the headers from inbound to outbound requests, or the trace shatters. Envoy cannot do that for you; this is the single most common "why are my traces broken" answer.</li>
+    <li><strong>Sampling is the whole design.</strong> Storing every span at 1B req/day is a second data platform. <em>Head sampling</em> (decide at the edge, e.g. 0.1%) is cheap but decides <strong>before knowing if the request is interesting</strong> — you keep a million boring traces and miss the one 30-second outlier. <em>Tail sampling</em> buffers each trace briefly at the collector and keeps the interesting ones (errors, slow, rare routes) — 100% of the value at 0.1% of the storage, paid for with collector memory and complexity. Production answer: low-rate head sampling for the baseline + tail rules for anomalies.</li>
+  </ul>
+  <div class="whynot"><span class="t">WHY TRACES AT ALL, IF METRICS ALREADY SHOW THE LATENCY?</span>
+  <p>Metrics tell you <em>that</em> p99 doubled; only a trace shows <em>where those specific 200 ms went</em> — which hop, queue, retry, or lock. Metrics aggregate away causality by construction. Conversely traces can't alert (sampled, delayed). Logs carry the arbitrary detail both discard. The three aren't rivals; they're the same events at three compression levels: metrics = aggregate, traces = causal skeleton, logs = full text. Pick per question, join by trace ID.</p></div>
+
+  <h3>Logs at the edge: the firehose discipline</h3>
+  <ul>
+    <li><strong>Structured (JSON/proto) from birth</strong> — grep doesn't scale to TB/day; fields do. Nginx: <code>log_format json_combined escape=json …</code> including <code>$request_time</code>, <code>$upstream_response_time</code>, trace ID, route, tenant.</li>
+    <li><strong>Budget math you should be able to do live:</strong> 1B req/day × ~400 bytes/line ≈ 400 GB/day raw, ~×2 replicated, before indexes. Hence: full logs for errors + sampled success logs (1–10%) + <em>always</em> full metrics (they're cheap). Sampling successes is safe because §16's metrics already count them exactly.</li>
+    <li><strong>Local buffering with caps</strong> (§15 backpressure applies to telemetry too): when the log pipeline backs up, drop debug-level locally rather than block the data plane. Telemetry must never be able to take down the thing it observes — write that sentence in every design doc.</li>
+  </ul>
+
+  <h3>Closing the loop: SLOs and error budgets</h3>
+  <div class="keyline"><span class="t">THE OPERATING CONTRACT</span>
+  <p>Define per journey, not per server: "99.9% of checkout requests succeed in &lt;500 ms, measured at the edge over 30 days." That yields an <strong>error budget</strong> (0.1% ≈ 43 min/month of full badness) — the explicit exchange rate between reliability and velocity: budget healthy → ship fast; budget burning → freeze features, spend on §15 hardening. Alert on <strong>burn rate</strong> (how fast the budget is depleting: page at 14×/1 h AND 6×/6 h-style multiwindow rules), not on raw CPU or single latency spikes — burn-rate alerts are the only kind that are simultaneously fast, precise, and quiet. This paragraph — SLO → budget → burn-rate paging → §15's shedding tied to the same criticality classes — is the difference between "we have Grafana" and "we operate a service."</p></div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ================= 17 DESIGN LAB ================= -->
+<section id="lab">
+  <span class="eyebrow">Section 17 · Design lab</span>
+  <h2>Four staff-level prompts, worked end to end</h2>
+  <p>Format for each: restate → numbers first → architecture → the why-nots you volunteer before being asked → the follow-up the interviewer is holding in reserve. Practice delivering each in 12–15 minutes.</p>
+
+  <h3>LAB 1 — "Design a shared TTL cache for gateway verdicts across 200 pods"</h3>
+  <div class="card">
+    <p><strong>Restate + requirements you must extract:</strong> What's cached? (authz verdicts §05, reputation lookups §06, policy decisions — small values, ~100 B–1 KB.) Staleness tolerance? (seconds, because TTL is the contract.) Correctness on miss = safe (recompute), so this is an <em>optimization</em> cache, not a source of truth — say that sentence early; it licenses every shortcut that follows.</p>
+    <p><strong>Numbers first:</strong> 200 pods × 5k RPS = 1M lookups/s. Hot keyset maybe 10M keys × 1 KB = 10 GB total. Per-pod RAM budget say 1–2 GB → each pod can hold the hot 10–20% locally.</p>
+    <p><strong>Architecture — two tiers, both with TTL:</strong></p>
+    <ul>
+      <li><strong>L1: in-process per pod.</strong> Sharded hash map (shard by key-hash to kill lock contention — §14 false-sharing logic), LRU or TinyLFU eviction, TTL checked lazily on read (§04's limit_req trick: no background reaper needed; expired entries evict on touch or via LRU pressure). Lookup ~100 ns. Serves ~80–90% of hits with zero network.</li>
+      <li><strong>L2: shared Redis/memcached tier, consistent-hashed.</strong> Catches the long tail and makes a new pod warm-ish. Lookup ~0.5 ms (§14 cost table). Consistent hashing so scaling the cache tier moves 1/N of keys, not all (same reason as §01's L4 Maglev hashing).</li>
+      <li><strong>Read path:</strong> L1 → L2 → compute → write back to both, each with TTL. <strong>Write path for verdict changes:</strong> don't chase invalidation first — TTL <em>is</em> the consistency model; bound staleness = L1 TTL. If the interviewer needs faster kill (revoked token! §13 CAE): add a pub/sub invalidation channel, but frame it as best-effort acceleration <em>on top of</em> TTL correctness, never instead of it.</li>
+    </ul>
+    <p><strong>The two failure modes that decide the interview:</strong></p>
+    <ul>
+      <li><strong>Stampede (dog-pile):</strong> a hot key expires; 1M req/s all miss simultaneously and stampede the backend — you've built a self-DoS scheduled by your own TTL. Fixes, in order: <em>singleflight</em> per pod (one in-flight recompute per key, others wait on it); <em>TTL jitter</em> (±10% so fleet expiries desynchronize); <em>serve-stale-while-revalidate</em> (return the expired value, refresh async — §15's degrade-don't-fail); optionally <em>probabilistic early refresh</em> (XFetch: refresh with probability rising as expiry nears).</li>
+      <li><strong>Negative caching:</strong> cache "not found / denied" too (short TTL), or a miss-storm on a nonexistent key (attacker-controlled! §06) bypasses the cache entirely. Unbounded attacker-chosen keys also demand an L1 size cap + eviction — §04's bounded-shm lesson again.</li>
+    </ul>
+    <p><strong>Why-nots to volunteer:</strong> Why not L2-only? Adds 0.5 ms × 1M/s network to every lookup — §04's sync-Redis mistake. Why not strongly-consistent replicated cache (e.g., via Raft)? Quorum write per cache fill at 1M/s is absurd for data whose contract is already "stale up to TTL" — consistency model must match the weakest guarantee the caller needs (§07 etcd discussion, inverted). Why not gossip full replication to all pods? 10 GB × 200 pods of RAM and O(pods²) churn traffic; fine for tiny hot sets (that's what §06's bloom blob push is), wrong for 10M keys.</p>
+    <p><strong>Reserve follow-up:</strong> "Redis tier dies — what happens?" Answer: L1 keeps serving its ~85%; misses recompute against the backend, which must be protected by §15 shedding/breakers sized for cache-cold load; and this scenario is <em>why</em> L1 exists per pod rather than trusting L2 alone. Fail-open on optimization caches, fail-closed never applies — because it was never a source of truth (callback to your opening sentence).</p>
+  </div>
+
+  <h3>LAB 2 — "Design the egress gateway that inspects streaming AI traffic for a 100k-employee company"</h3>
+  <div class="card">
+    <p><strong>This is a composition test.</strong> Skeleton: endpoint client + PoP gateways (§11 pincer) → TLS break-and-inspect with corp CA, bypass list for pinned/mTLS apps (§11) → identity attached at connect: user, device posture, agent-vs-human (§13) → two-stage pipeline: Aho-Corasick DLP/patterns on every byte, ML scoring gated to a few % (§12) → per-route verdict modes: hold-and-release for uploads, stream-and-kill for LLM responses, async-audit for low-risk (§12) → destination catalog: sanctioned/tolerated/forbidden, built by observation first (§13 shadow-AI sequencing).</p>
+    <p><strong>Numbers to anchor:</strong> 100k users × ~2k requests/day ≈ 200M req/day ≈ 2.3k RPS average, ~10k peak — small! Volume isn't the challenge; <em>session length and bytes are</em>: streaming sessions minutes long, uploads in GBs. So size by concurrent streams (~50–100k) and enforce §12's byte+time buffer caps, not by RPS.</p>
+    <p><strong>Why-nots to volunteer:</strong> endpoint-only (misses unmanaged paths, N-OS fragility) vs network-only (ECH/QUIC erosion, §11 table) → pincer. Block-AI-domains-day-one → drives usage underground (§13). 100%-to-ML → budget failure (§12 gate). Fail-open vs fail-closed stated <em>per route class</em>: closed for DLP-critical uploads, open-with-audit for general browsing — an outage that blocks all web for 100k people is also an incident (§05 fail-policy).</p>
+    <p><strong>Reserve follow-up:</strong> "An agent framework starts exfiltrating via a sanctioned AI API — prompt-injected." Answer chains §13 (agent has narrow OBO token, so blast radius is pre-capped) + §12 (stream-and-kill on the DLP hit) + §13 CAE (one event revokes every session that principal holds) + §16 (the trace ties the tool-call chain together for forensics).</p>
+  </div>
+
+  <h3>LAB 3 — "Flash sale in 20 minutes; the edge fell over in the last one. Go."</h3>
+  <div class="card">
+    <p><strong>This is an operations test — answer in timeline order.</strong></p>
+    <ul>
+      <li><strong>Before (now):</strong> pre-scale past the autoscaler (§15: scaling is minutes, spikes are seconds — pre-warm pods, connection pools, caches); raise <code>somaxconn</code>/backlog and verify no accept-queue overflows from last time (§01 — check <code>netstat -s</code> listen overflow counters, the silent killer); confirm TLS session resumption + upstream keepalive (§03 — handshake CPU is the classic sale-day cliff); set <code>limit_req</code> per-IP with nodelay burst (§04); pre-position the waiting-room/queue page and label criticality classes so shedding has an order (§15); freeze deploys, canary any config (§15).</li>
+      <li><strong>During:</strong> watch three numbers: edge p99 vs upstream p99 split (§03 — whose fault?), accept-queue depth, error-budget burn rate (§16). At the knee: shed lowest class first with fast 429+Retry-After, serve-stale product pages (§15), never let retries stack — retry budget already capped (§15).</li>
+      <li><strong>After:</strong> the load test that would have caught it: open-loop wrk2 at 2× expected peak, measuring tails (§03 coordinated omission).</li>
+    </ul>
+    <p><strong>Reserve follow-up:</strong> "Why did adding 3× pods mid-incident not help last time?" Cold caches + cache-stampede on shared tiers + retry backlog sustaining metastable overload (§15, LAB 1 stampede) — capacity added into a feedback loop feeds the loop.</p>
+  </div>
+
+  <h3>LAB 4 — "Distribute a 10M-entry, minutely-updated blocklist to 10,000 proxies worldwide"</h3>
+  <div class="card">
+    <p><strong>Recognize the shape:</strong> this is <em>config distribution</em>, not a database — read-only at the edge, single writer, staleness tolerance ~1 min. That classification eliminates 90% of wrong answers immediately.</p>
+    <p><strong>Architecture:</strong> compiler service builds the artifact (bloom filter blob §06, ~18 MB, plus exact-set delta files), versions it (content-hash), signs it (§09 logic: verify authenticity at the edge — a poisoned blocklist is an attack vector), pushes to blob storage + CDN fan-out; proxies poll-or-subscribe for the version pointer, download via CDN, <strong>atomically swap</strong> the in-memory pointer (build-new-then-swap, never mutate-in-place — same generational trick as §02's config reload). Deltas minute-to-minute, full snapshot hourly for new/recovering nodes.</p>
+    <p><strong>Why-nots to volunteer:</strong> Why not each proxy queries a central DB per lookup? 10k × 100k lookups/s and an RTT on the hot path — §04/§06 already settled this. Why not pub/sub pushing raw entries? Ordering/loss handling per proxy re-derives state badly; versioned immutable artifacts make every proxy's state exactly "version N" — trivially observable (§16: export the version as a metric; alert on fleet version skew). Why not strong consistency? A blocklist 60 s stale is the spec, and CDN fan-out to 10k nodes is only cheap <em>because</em> it's eventually consistent.</p>
+    <p><strong>Reserve follow-up:</strong> "An entry must die NOW, not in a minute" — the CAE pattern again (§13): baseline artifact cadence + a tiny urgent channel (pub/sub of individual revocations applied to an overlay set), quiet by default, targeted on signal. Third appearance of that asymmetry; name it as a pattern and the room nods.</p>
+  </div>
+
+  <div class="keyline"><span class="t">HOW TO REHEARSE</span>
+  <p>For each lab: 2 min requirements+numbers aloud, 6 min whiteboard the boxes from memory, 4 min deliver the why-nots <em>unprompted</em>, then answer the reserve follow-up. If any why-not surprises you, its home section is cited inline — reread just that. Two full passes of this beats ten passive rereads.</p></div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ================= 18 EXAM ================= -->
+<section id="exam">
+  <span class="eyebrow">Section 18 · Exam mode</span>
+  <h2>Active recall: answer aloud before you tap</h2>
+  <p>Reading feels like knowing; retrieval is knowing. Answer each question out loud in full sentences, then open it. Wrong or fuzzy → the cited section is your reread list. Target: all green in two sittings.</p>
+
+  <h4>Round 1 · Mechanisms — "how does it actually work?"</h4>
+  <details class="q"><summary><span class="qn">Q01</span>Why can one nginx worker handle 50,000 connections while Apache's classic model couldn't?</summary><div class="a"><p>Apache dedicated a thread/process (~1 MB stack + context switches) to each connection, mostly to <em>wait</em>. Nginx registers all sockets with epoll and one worker touches only sockets the kernel says are ready — O(ready) per wakeup, a few KB per idle connection, no switching. Waiting was made nearly free. (§02)</p></div></details>
+  <details class="q"><summary><span class="qn">Q02</span>What exactly happens inside nginx when you send SIGHUP, and why is it zero-downtime?</summary><div class="a"><p>Master parses the new config; if valid, forks a fresh generation of workers with it, then signals old workers to stop accepting and drain in-flight requests. Two generations overlap briefly; listening sockets stay open throughout, so no connection is refused or reset. Config change is a process lifecycle, not a mutation. (§02)</p></div></details>
+  <details class="q"><summary><span class="qn">Q03</span>A request never appears in nginx logs, and the client saw a timeout. Name the layer and the two commands you'd check.</summary><div class="a"><p>Kernel accept-queue overflow — the connection died before nginx ever <code>accept()</code>ed it. Check <code>ss -lnt</code> (Recv-Q vs backlog on the listener) and <code>netstat -s | grep -i listen</code> (overflow counters). (§01, §03)</p></div></details>
+  <details class="q"><summary><span class="qn">Q04</span>How does nginx's limit_req compute a leaky bucket without any background timer?</summary><div class="a"><p>Lazily: per key it stores <code>last_seen</code> and <code>excess</code>; on each arrival it drains retroactively — <code>excess = max(0, excess − rate·Δt) + 1</code> — and rejects if excess exceeds burst. State only updates when the key shows up; storage is a shared-memory red-black tree with LRU eviction, so it's O(1) per request and bounded under key-spraying attacks. (§04)</p></div></details>
+  <details class="q"><summary><span class="qn">Q05</span>In mTLS, presenting the client certificate proves nothing by itself. What actually proves identity?</summary><div class="a"><p>CertificateVerify: a signature over the entire handshake transcript with the private key matching the cert — proving key possession and binding the proof to this exact handshake so it can't be replayed. (§09)</p></div></details>
+  <details class="q"><summary><span class="qn">Q06</span>Trace a packet from "app calls payments:8080" to the receiving container, in an Istio mesh.</summary><div class="a"><p>App connects → pod-local iptables OUTPUT rule redirects to Envoy :15001 → Envoy reads original dst via SO_ORIGINAL_DST, picks an endpoint from EDS, opens mTLS using its SDS-delivered cert → across the CNI network to the target pod → target's PREROUTING rule redirects into its Envoy :15006 → mTLS terminated, AuthorizationPolicy checked against the peer's SPIFFE SAN → forwarded over localhost to the app. (§08, §09)</p></div></details>
+  <details class="q"><summary><span class="qn">Q07</span>Why does a Bloom filter never produce false negatives, and where does the false-positive rate come from?</summary><div class="a"><p>Insertion sets k bits and bits are never cleared, so a member's bits are always all set → any zero bit is definitive absence. False positives arise when other keys' insertions happen to have set all k of a non-member's bits; the rate is tuned by bits-per-entry (~14.4 bits/entry for 0.1%). (§06)</p></div></details>
+  <details class="q"><summary><span class="qn">Q08</span>Why can Aho-Corasick scan a chunked/streaming body without any overlap-window trick?</summary><div class="a"><p>Its entire scan state is one automaton node, and the text pointer never moves backwards. Carry the node across chunk boundaries and a pattern spanning two chunks completes naturally. (Stage-2 ML classifiers do need overlapping windows — they require context, not just state.) (§12)</p></div></details>
+
+  <h4>Round 2 · Numbers — "justify it quantitatively"</h4>
+  <details class="q"><summary><span class="qn">Q09</span>Defend p99 SLOs over averages using the fan-out argument, with the arithmetic.</summary><div class="a"><p>A page fanning out to 50 backend calls hits at least one p99-slow call with probability 1 − 0.99⁵⁰ ≈ 39%. Tail latency compounds through fan-out; averages hide exactly the experiences users get most upset about. (§03)</p></div></details>
+  <details class="q"><summary><span class="qn">Q10</span>Quantify why per-request global rate limiting through Redis is rejected at 200 pods × 5k RPS.</summary><div class="a"><p>1M Redis ops/s just for limiting, plus 0.5–2 ms RTT added to every request — often exceeding the gateway's whole processing budget — plus a new SPOF whose failure forces fail-open (no limits during attack) or fail-closed (self-outage). Local buckets + async reconciliation bound the error to sync-interval × rate instead. (§04)</p></div></details>
+  <details class="q"><summary><span class="qn">Q11</span>Size a Bloom filter for 10M entries at 1% false positives, and compare to a hash set.</summary><div class="a"><p>~9.6 bits/entry (1.44·log₂(1/0.01)) ≈ 96 Mbit ≈ 12 MB, k ≈ 7 hashes. An exact hash set of address strings runs ~50–100 B/entry ≈ 0.5–1 GB — a 40–80× difference that decides whether it fits hot in every worker. (§06)</p></div></details>
+  <details class="q"><summary><span class="qn">Q12</span>Three retry attempts per layer across three layers — what's the worst-case amplification, and what caps it?</summary><div class="a"><p>Up to 3×3×3 = 27× load at the bottom layer during an outage. A fleet-level retry <em>budget</em> (e.g., retries ≤ 20% of active requests, Envoy-style) caps the multiplier globally, which per-caller attempt counts cannot. (§15)</p></div></details>
+  <details class="q"><summary><span class="qn">Q13</span>Your logging bill: 1B requests/day at ~400 bytes/line. Do the math and state the standard mitigation.</summary><div class="a"><p>~400 GB/day raw, ~800 GB replicated, before indexing. Mitigation: full logs for errors, sample successes at 1–10%, rely on metrics (exact counters, cheap) for the totals — safe because histograms already count every request. (§16)</p></div></details>
+  <details class="q"><summary><span class="qn">Q14</span>Why is a syscall a "cost row" worth designing around? Give the number and one system built on avoiding it.</summary><div class="a"><p>~0.5–2 µs per crossing post-Spectre — at 1M ops/s that's 0.5–2 entire cores of pure overhead. io_uring amortizes or eliminates crossings via shared submission/completion rings; epoll's 512-events-per-wakeup batching is the same idea in older clothes. (§14)</p></div></details>
+
+  <h4>Round 3 · Traps — "the misconception the interviewer is fishing for"</h4>
+  <details class="q"><summary><span class="qn">Q15</span>"K8s Services load-balance, so why is one pod hot?" — what's the trap?</summary><div class="a"><p>kube-proxy DNAT balances at <em>connection</em> time; gRPC/HTTP2 multiplexes everything over one long-lived connection, so one pod receives it all. Fix is L7 (per-request) balancing — the sidecar's least-request policy. (§07, §08)</p></div></details>
+  <details class="q"><summary><span class="qn">Q16</span>Why is wiring a database health check into a liveness probe an outage generator?</summary><div class="a"><p>Liveness failure restarts containers. A DB blip then mass-restarts every pod — cold caches, connection stampedes, amplified outage. Dependency checks belong in <em>readiness</em> (remove from endpoints, don't kill). (§07)</p></div></details>
+  <details class="q"><summary><span class="qn">Q17</span>"We'll intercept 100% of TLS" — give the two categories that make this claim false.</summary><div class="a"><p>Cert-pinned apps (they correctly reject the minted cert — bypass list required) and destination-mTLS (the client's CertificateVerify can't be re-signed into the gateway's second session without the client's private key). Honest posture: inspect most, bypass some, log all. (§11)</p></div></details>
+  <details class="q"><summary><span class="qn">Q18</span>Why doesn't autoscaling save you from a cascading failure?</summary><div class="a"><p>Timescales and feedback: scale-out takes minutes, cascades take seconds; new pods arrive cold (caches, JIT, pools) so they initially lower fleet performance; and latency-triggered scaling in an overload is itself a positive feedback loop. Shedding and breakers handle transients; autoscaling handles diurnal shape. (§15)</p></div></details>
+  <details class="q"><summary><span class="qn">Q19</span>Why can't you average p99s from 500 pods into a fleet p99, and what representation fixes it?</summary><div class="a"><p>Percentiles don't compose — each pod's p99 is a point on a different distribution. Histogram bucket <em>counts</em> do sum; export buckets per pod, merge fleet-wide, derive any percentile from the merged distribution. (§16)</p></div></details>
+  <details class="q"><summary><span class="qn">Q20</span>Why is a backtracking regex engine on an inspection hot path a security bug in itself?</summary><div class="a"><p>Catastrophic backtracking gives attackers an input-controlled exponential worst case — ReDoS: the inspector becomes the DoS vector. Hostile-input paths demand automaton matching with an adversary-independent per-byte ceiling. (§12)</p></div></details>
+  <details class="q"><summary><span class="qn">Q21</span>Spot the flaw: "our fallback for the recommendations service is to query the product DB directly."</summary><div class="a"><p>The fallback fires exactly when the system is sickest and redirects full traffic onto a dependency not sized for it — the fallback stampedes and causes the second outage. Fallbacks must be cheaper than the primary (static bestsellers, stale cache) and continuously exercised. (§15)</p></div></details>
+  <details class="q"><summary><span class="qn">Q22</span>Why do 24-hour auto-rotated certs beat 5-year certs + CRL/OCSP in a mesh — and what's the CAE analogue?</summary><div class="a"><p>Distributing revocation to 10k proxies reliably is the hard system; short lifetime makes revocation the default outcome of a clock. CAE is the same inversion for tokens: moderate TTLs plus targeted revocation events, so IdP load scales with incidents, not traffic. Quiet default path, expensive path on signal — the manual's master pattern. (§09, §13)</p></div></details>
+
+  <div class="keyline"><span class="t">SCORING</span>
+  <p>20+ fluent: book the interview. 15–19: reread only the cited sections you missed, retest tomorrow. Under 15: run §17's labs aloud first — retrieval through design problems rebuilds the connections faster than rereading prose.</p></div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ================= 19 WORKED ALGORITHMS ================= -->
+<section id="worked">
+  <span class="eyebrow">Section 19 · Executed, not described</span>
+  <h2>Bloom filter &amp; Aho-Corasick: real runs, real traces, real surprises</h2>
+  <p>Everything below was actually executed — the bit positions, false positives, state transitions, and timings are genuine program output, including two accidents that teach more than the plan did. Full runnable source at the end of each half.</p>
+
+  <!-- ============ BLOOM ============ -->
+  <h3>Part A · Bloom filter, five experiments</h3>
+
+  <h4>A1 — A 32-bit filter you can verify by eye</h4>
+  <p>Three "malicious" IPs inserted into m=32 bits with k=3 hashes. Watch which bits each key claims:</p>
+  <pre class="term"><span class="hd">RUN — insert phase</span>
+insert 203.0.113.9    -&gt; bits <span class="g">[2, 5, 25]</span>
+insert 198.51.100.7   -&gt; bits <span class="g">[4, 13, 16]</span>
+insert 192.0.2.44     -&gt; bits <span class="g">[7, 8, 18]</span>
+bit array set positions: [2, 4, 5, 7, 8, 13, 16, 18, 25]  (9/32 set)</pre>
+  <p>Now three queries — one true positive, two true negatives:</p>
+  <pre class="term"><span class="hd">RUN — query phase</span>
+query 203.0.113.9    -&gt; bits [2, 5, 25]  -&gt; <span class="y">MAYBE (all set)</span>          <span class="c"># true positive: its own bits</span>
+query 10.0.0.1       -&gt; bits [1, 8, 11]  -&gt; <span class="g">DEFINITELY NOT</span>          <span class="c"># bit 1 is zero → proof of absence</span>
+query 172.16.5.5     -&gt; bits [6, 11, 11] -&gt; <span class="g">DEFINITELY NOT</span>          <span class="c"># bit 6 is zero</span></pre>
+  <p>Note <code>172.16.5.5</code>: two of its three hashes landed on the <em>same</em> bit (11, 11). Legal and harmless — k hashes are independent draws, collisions among them just mean fewer distinct bits checked. It matters again in A1's false-positive hunt below.</p>
+
+  <h4>A2 — Hunting a real false positive</h4>
+  <p>Scan <code>10.0.0.0/24</code> — 256 addresses <em>never inserted</em> — and ask the filter about each:</p>
+  <pre class="term"><span class="hd">RUN — 42 candidates scanned before 3 FPs found</span>
+FALSE POSITIVE: 10.0.0.0    bits [5, 16, 25]  <span class="c"># bit 5 from IP#1, 16 from IP#2, 25 from IP#1</span>
+FALSE POSITIVE: 10.0.0.24   bits [4, 5, 25]   <span class="c"># assembled from three different insertions</span>
+FALSE POSITIVE: 10.0.0.41   bits [2, 2, 5]    <span class="c"># self-collision! only needs TWO borrowed bits</span></pre>
+  <p>This is the mechanism of a false positive laid bare: nobody inserted <code>10.0.0.0</code>, but its three bits were each set by <em>different</em> legitimate insertions, and the filter cannot tell "all set by one key" from "all set by strangers." <code>10.0.0.41</code> shows the sharper edge: its internal hash collision means only two foreign bits had to be occupied — self-colliding keys have a higher personal FP probability. This 32-bit toy runs at ~28% fill and shows ~7% FP; that's why real sizing (next) targets ≤1%.</p>
+  <div class="whynot"><span class="t">WHY IS A FALSE POSITIVE ACCEPTABLE HERE BUT A FALSE NEGATIVE WOULDN'T BE?</span>
+  <p>Deployment asymmetry (§06): "maybe dirty" triggers an exact confirmation check — an innocent 10.0.0.24 pays one extra lookup, ~0.5 ms, once. A false <em>negative</em> would wave known-bad traffic through with no second chance. The filter's math guarantees the harmless error direction and forbids the harmful one — that's why it fits security pre-filtering so well.</p></div>
+
+  <h4>A3 — Theory vs measurement at 200k entries</h4>
+  <pre class="term"><span class="hd">RUN — sized by the formulas from §06</span>
+formula: m = 1,917,012 bits (234 KiB), k = 7, 9.59 bits/entry   <span class="c"># target p = 1%</span>
+measured FP rate: <span class="y">1.064%</span>   (theory ~1%)      <span class="c"># over 50,000 known non-members</span>
+measured FN rate: <span class="g">0.000%</span>   (theory: exactly 0, always)   <span class="c"># over 50,000 known members</span></pre>
+  <p>The formulas are not approximations you hope hold — they land within measurement noise. 234 KiB for 200k keys; linearly, ~12 MB for 10M, confirming §06's claim from live code.</p>
+
+  <h4>A4 — Saturation: what happens when you lie to the filter about n</h4>
+  <pre class="term"><span class="hd">RUN — same filter (sized for 200k), kept inserting</span>
+after 200,000 inserts: bits set  ~50%    FP rate   1.06%   <span class="c"># as designed</span>
+after 400,000 inserts: bits set  76.7%   FP rate  <span class="y">15.80%</span>
+after 600,000 inserts: bits set  88.8%   FP rate  <span class="y">43.42%</span>   <span class="c"># nearly a coin flip</span></pre>
+  <p>Fill fraction follows 1 − e^(−kn/m): plug n=400k in and you predict 76.8% — measured 76.7%. FP rate is (fill)^k, and it <em>explodes</em>: 2× overfill → 15× the error, 3× → 40×. Operational lesson: a Bloom filter fails <strong>silently and gradually</strong> — no exception, no OOM, just quietly rising junk verdicts. So production filters export their fill ratio as a metric (§16) and alert well before 60%, and the §06 rebuild-every-minute pipeline re-sizes from the current n each build.</p>
+
+  <h4>A5 — Deletion: the counting variant, and its cost</h4>
+  <pre class="term"><span class="hd">RUN — counters instead of bits</span>
+query evil.example after insert : True
+query evil.example after delete : <span class="g">False</span>
+query bad.example  (untouched)  : <span class="g">True</span>   <span class="c"># shared positions survived: counters went 2→1, not 1→0</span></pre>
+  <p>Plain Bloom can't delete — clearing a bit might destroy another key's evidence (exactly the sharing A2 exposed). Counting Bloom stores a small counter per position: delete = decrement, and shared positions survive. Price: 4-bit counters = 4× memory, and counter overflow must be handled (saturate, don't wrap). This is the honest bridge to §06's cuckoo-filter aside: if deletion is frequent, cuckoo beats counting-Bloom on space; if the set is rebuilt wholesale each minute, plain Bloom stays cheapest. Choose by the <em>update pattern</em>, not the lookup pattern.</p>
+
+  <details class="q"><summary><span class="qn">SRC</span>Full Bloom source (60 lines, runnable as-is)</summary><div class="a">
+  <pre class="term">import hashlib, math
+
+def h(key, seed, m):
+    d = hashlib.sha256(f"{seed}:{key}".encode()).digest()
+    return int.from_bytes(d[:8], 'big') % m
+
+class Bloom:
+    def __init__(self, m, k):
+        self.m, self.k, self.bits = m, k, bytearray((m+7)//8)
+    def _idx(self, key):
+        return [h(key, i, self.m) for i in range(self.k)]
+    def add(self, key):
+        for i in self._idx(key):
+            self.bits[i//8] |= 1 &lt;&lt; (i % 8)
+    def query(self, key):                     <span class="c"># all() short-circuits on first zero bit</span>
+        return all(self.bits[i//8] &gt;&gt; (i%8) &amp; 1 for i in self._idx(key))
+
+def size_for(n, p):                           <span class="c"># §06 formulas</span>
+    m = math.ceil(-n * math.log(p) / (math.log(2)**2))
+    k = max(1, round(m/n * math.log(2)))
+    return m, k
+
+class CountingBloom(Bloom):                   <span class="c"># deletable variant (A5)</span>
+    def __init__(self, m, k):
+        self.m, self.k, self.cnt = m, k, [0]*m
+    def add(self, key):
+        for i in self._idx(key): self.cnt[i] += 1
+    def remove(self, key):
+        for i in self._idx(key): self.cnt[i] -= 1
+    def query(self, key):
+        return all(self.cnt[i] &gt; 0 for i in self._idx(key))
+<span class="c"># production notes: use 2 fast hashes + Kirsch-Mitzenmacher (h1+i*h2), not k sha256s;
+# store bits in one contiguous array for cache locality (§14); export fill%% as a metric (§16)</span></pre>
+  </div></details>
+
+  <!-- ============ AHO-CORASICK ============ -->
+  <h3>Part B · Aho-Corasick, five experiments</h3>
+
+  <h4>B1 — The automaton for {he, she, his, hers}, fully dumped</h4>
+  <pre class="term"><span class="hd">RUN — every state: its path, goto edges, fail link, outputs</span>
+state  path    goto edges          fail   outputs
+    0  [    ]  h-&gt;1, s-&gt;3            0    []
+    1  [h   ]  e-&gt;2, i-&gt;6            0    []
+    2  [he  ]  r-&gt;8                  0    ['he']
+    3  [s   ]  h-&gt;4                  0    []
+    4  [sh  ]  e-&gt;5                  <span class="y">1</span>    []          <span class="c"># suffix "h" of "sh" = prefix of he/his</span>
+    5  [she ]                        <span class="y">2</span>    ['she', <span class="y">'he'</span>]  <span class="c"># inherits he via fail chain!</span>
+    6  [hi  ]  s-&gt;7                  0    []
+    7  [his ]                        3    ['his']
+    8  [her ]  s-&gt;9                  0    []
+    9  [hers]                        3    ['hers']</pre>
+  <p>Two things to point at. State 4's fail link = 1: after reading "sh", the longest suffix that is also some pattern's prefix is "h", so a mismatch resumes from the "h" state instead of root — no rescanning. State 5's output list contains <code>he</code> even though its path spells "she": outputs are merged down the fail chain at build time, which is why finishing "she" reports the overlapping "he" for free.</p>
+
+  <h4>B2 — Positive trace: scanning "ushers"</h4>
+  <pre class="term"><span class="hd">RUN — one state integer, six characters, three matches</span>
+read 'u'  state  0 -&gt; 0
+read 's'  state  0 -&gt; 3
+read 'h'  state  3 -&gt; 4
+read 'e'  state  4 -&gt; 5   <span class="g">MATCH: she@1  he@2</span>     <span class="c"># two overlapping patterns, one step</span>
+read 'r'  state  5 -&gt; 8   <span class="c"># "she"+r has suffix "her" → jumped INTO the hers branch via fail</span>
+read 's'  state  8 -&gt; 9   <span class="g">MATCH: hers@2</span>
+matches: [(1,'she'), (2,'he'), (2,'hers')]</pre>
+  <p>The 5→8 transition is the algorithm's soul: state 5 has no 'r' edge, so it falls to state 2 ("he"), which does — landing in "her". Three overlapping matches found in exactly six character-steps; a naive scanner would have re-read characters multiple times.</p>
+
+  <h4>B3 — The "negative" trace that wasn't: an honest accident</h4>
+  <p>This text was <em>chosen as a true negative</em> — "hazard shiv herd", full of near-misses. Watch what the run actually said:</p>
+  <pre class="term"><span class="hd">RUN — near-misses dying via fail links… and one surprise</span>
+read 'h'  state 0 -&gt; 1        <span class="c"># "hazard": h looks promising…</span>
+read 'a'  state 1 -&gt; 0        <span class="c"># …'a' kills it, fail to root, no rescan</span>
+...
+read 's'  state 0 -&gt; 3        <span class="c"># "shiv": s-h builds "sh" (state 4)…</span>
+read 'h'  state 3 -&gt; 4
+read 'i'  state 4 -&gt; <span class="y">6</span>        <span class="c"># no 'i' edge at 4 → fail to 1 ("h") → h+i = "hi"! pivoted mid-word</span>
+read 'v'  state 6 -&gt; 0        <span class="c"># 'v' ends the "his" hope</span>
+...
+read 'e'  state 1 -&gt; 2   <span class="y">MATCH: he@12</span>   <span class="c"># inside "herd" (!)</span>
+read 'r'  state 2 -&gt; 8
+read 'd'  state 8 -&gt; 0
+matches: [(12, 'he')]</pre>
+  <p>Two lessons, one intended and one earned. Intended: the 4→6 pivot — "shi" seamlessly re-interpreted as "…hi" without moving the text pointer backwards. Earned: <strong>"herd" contains "he"</strong> — substring matchers do not know about word boundaries. In DLP terms: the pattern <code>ssn</code> fires inside "expre<u>ssn</u>otes"; a credit-card digit pattern fires inside a phone number. Production stage-1 therefore emits <em>candidates</em>, and a cheap post-filter (boundary check, checksum like Luhn for card numbers, context window) validates before the verdict — yet another instance of the manual's cheap-gate-then-verify pattern (§06, §12). A "false positive" here is not a bug in Aho-Corasick; it's the designed division of labor.</p>
+
+  <h4>B4 — Streaming across the worst possible chunk boundary</h4>
+  <p>Same "ushers" input, deliberately split so that <em>both</em> matches span chunk edges:</p>
+  <pre class="term"><span class="hd">RUN — chunks "us" | "he" | "rs", carrying one integer of state</span>
+chunk 'us': state out 3, matches so far []
+chunk 'he': state out 5, matches so far [(1,'she'), (2,'he')]   <span class="c"># "she" completed ACROSS the cut</span>
+chunk 'rs': state out 9, matches so far [(1,'she'), (2,'he'), (2,'hers')]
+final == whole-text scan: <span class="g">identical</span></pre>
+  <p>This is §12's claim, demonstrated: the automaton's entire memory is one state integer, so a gateway scanning a streamed LLM response or chunked upload stores <em>4 bytes per connection</em> of scanner state — no buffering, no overlap windows, no missed boundary-spanning secrets. (The ML stage still needs windowed context; only the automaton stage gets this superpower.)</p>
+
+  <h4>B5 — The scaling benchmark, with an honest handicap</h4>
+  <pre class="term"><span class="hd">RUN — 1 MB text; naive = one C-speed text.find() per pattern; AC = pure Python</span>
+patterns    naive k-scans        AC single pass
+     100        0.078 s             0.266 s      <span class="c"># AC loses! interpreter tax</span>
+   1,000        0.787 s             0.342 s      <span class="c"># crossover</span>
+   5,000        <span class="y">3.931 s</span>             <span class="g">0.517 s</span>      <span class="c"># 7.6× — and growing linearly apart</span>
+(match counts agree at every size)</pre>
+  <p>Read the shape, not the absolute numbers. Naive scales <em>linearly with pattern count</em> (0.078 → 3.93 s, a clean 50× for 50× patterns). AC is nearly flat (0.27 → 0.52 s — growth is only automaton cache pressure). And this is pure-Python AC giving compiled C a ~30× head start per operation; at parity (Hyperscan-class engines, SIMD, §12) the crossover moves from ~500 patterns to ~a handful. At §12's real scale — thousands of patterns, every byte of every request — the naive approach isn't slower, it's <em>architecturally impossible</em>: 5,000 passes over each request body versus one.</p>
+
+  <details class="q"><summary><span class="qn">SRC</span>Full Aho-Corasick source (45 lines, runnable as-is)</summary><div class="a">
+  <pre class="term">from collections import deque
+
+class AC:
+    def __init__(self, patterns):
+        self.goto, self.fail, self.out = [{}], [0], [[]]
+        for p in patterns:                        <span class="c"># 1) trie of all patterns</span>
+            s = 0
+            for ch in p:
+                if ch not in self.goto[s]:
+                    self.goto.append({}); self.fail.append(0); self.out.append([])
+                    self.goto[s][ch] = len(self.goto) - 1
+                s = self.goto[s][ch]
+            self.out[s].append(p)
+        q = deque()                               <span class="c"># 2) fail links by BFS (depth order matters:</span>
+        for ch, s in self.goto[0].items():        <span class="c">#    a node's fail is always shallower)</span>
+            q.append(s)                           <span class="c">#    depth-1 nodes fail to root</span>
+        while q:
+            r = q.popleft()
+            for ch, s in self.goto[r].items():
+                q.append(s)
+                f = self.fail[r]                  <span class="c"># follow parent's fail chain until an</span>
+                while f and ch not in self.goto[f]:   <span class="c"># ancestor has a ch-edge</span>
+                    f = self.fail[f]
+                self.fail[s] = self.goto[f].get(ch, 0)
+                if self.fail[s] == s: self.fail[s] = 0
+                self.out[s] += self.out[self.fail[s]] <span class="c"># 3) inherit outputs (why she⇒he)</span>
+
+    def step(self, state, ch):                    <span class="c"># amortized O(1): fails only give back</span>
+        while state and ch not in self.goto[state]:   <span class="c"># depth that gotos paid for</span>
+            state = self.fail[state]
+        return self.goto[state].get(ch, 0)
+
+    def scan(self, text, state=0, base=0):        <span class="c"># state in/out ⇒ streaming (B4)</span>
+        hits = []
+        for i, ch in enumerate(text):
+            state = self.step(state, ch)
+            for p in self.out[state]:
+                hits.append((base + i - len(p) + 1, p))
+        return state, hits
+<span class="c"># production notes: dense 256-wide goto arrays or double-array tries beat dicts (§14
+# memory-bandwidth point); precompute the "next" DFA table to remove the fail loop
+# from the hot path entirely; case-fold/normalize input BEFORE scanning or attackers
+# trivially bypass with mixed case (normalization is itself attack surface — §12)</span></pre>
+  </div></details>
+
+  <div class="keyline"><span class="t">WHAT THE TWO ALGORITHMS SHARE — SAY THIS IN THE ROOM</span>
+  <p>Both convert an expensive question over a huge set ("is this key among 10M?", "do any of 5,000 patterns occur?") into <strong>a constant-cost-per-byte pass with a one-sided error or a candidate stream</strong>, and both delegate exactness to a rarer, pricier second stage. Bloom's zero-false-negative guarantee and AC's never-move-backwards guarantee are the same kind of promise: a hard worst-case bound an adversary cannot inflate (§12's ReDoS contrast). That property — adversary-independent hot-path cost — is the admission ticket for any algorithm running at a gateway's front door.</p></div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ================= 20 WORKED ALGORITHMS II ================= -->
+<section id="worked2">
+  <span class="eyebrow">Section 20 · Executed, not described — II</span>
+  <h2>Consistent hashing &amp; count-min sketch: the other two gateway workhorses</h2>
+  <p>The manual leaned on both without opening them: consistent hashing carries §01's L4 tier and Lab 1's cache tier; count-min sketch powers §06's "which keys are hot right now." Same rules as §19 — every number below is real program output (200k keys / 1M-request zipfian stream).</p>
+
+  <!-- ============ CONSISTENT HASHING ============ -->
+  <h3>Part A · Consistent hashing, three experiments</h3>
+
+  <h4>A1 — Why mod-N is a fleet-wide cache wipe</h4>
+  <pre class="term"><span class="hd">RUN — hash(key) mod N, growing 10 → 11 nodes</span>
+keys moved: 181,965 / 200,000 = <span class="y">91.0%</span>    (theory: 1 − 1/11 = 90.9%)</pre>
+  <p>Adding <em>one</em> node relocated 91% of keys. Meaning, concretely: scale your cache tier up by 10% and you just invalidated 91% of it — a self-inflicted stampede (§17 Lab 1) at the exact moment you added capacity because load was high. The failure isn't performance, it's <em>coupling</em>: with mod-N, every key's placement depends on N itself, so any change of N changes almost everything. Consistent hashing's entire purpose is to make placement depend only on the key and the surviving nodes.</p>
+
+  <h4>A2 — The ring, and what virtual nodes actually buy</h4>
+  <pre class="term"><span class="hd">RUN — ring: remap when adding node #11, and load balance across 10 nodes</span>
+ vnodes   moved on add   max/mean load   load stddev
+      1        <span class="y">1.11%</span>          <span class="y">2.24×</span>         76.3%
+     10       11.91%          1.54×         29.7%
+    100       10.19%          1.07×          4.8%
+   1000        9.01%          1.05×          3.5%
+(theory for moved-on-add: 1/11 = 9.09%)</pre>
+  <p>Two lessons hiding in one table:</p>
+  <ul>
+    <li><strong>The vnodes=1 row is a trap worth staring at.</strong> Only 1.11% moved — better than theory? No: with one point per node, the new node claims one random arc whose size has <em>huge variance</em>; this run happened to land a small arc. The same variance shows up as 2.24× overload on the unluckiest node. Low-vnode rings aren't wrong on average — they're wrong <em>in variance</em>, and production dies of variance (§03's tail-latency arithmetic, resurfacing in placement).</li>
+    <li><strong>Vnodes are a variance knob.</strong> 100–1000 points per node concentrates both metrics toward theory: ~9% movement (exactly the unavoidable 1/(N+1)) and ~1.05× worst-case load. Cost: ring size × vnodes entries and log(ring) lookup — trivial. This is why Cassandra/Dynamo-style systems default to hundreds of tokens per node.</li>
+  </ul>
+  <div class="whynot"><span class="t">WHY DOES "ONLY 1/N MOVES" MATTER SO MUCH AT A GATEWAY?</span>
+  <p>Three places in this manual quietly depend on it: the L4 tier (§01) keeps <em>existing TCP flows</em> pinned to their nginx box while machines join/leave — reshuffling flows means resets for users; Lab 1's L2 cache keeps 90% of its hit rate through a scale event instead of 9%; and §04's per-key rate-limit state stays on the pod that owns the key. Placement stability under membership change is the shared requirement, and it's the requirement mod-N structurally cannot meet.</p></div>
+
+  <h4>A3 — Maglev: trading a little churn for perfect balance</h4>
+  <pre class="term"><span class="hd">RUN — Maglev lookup table, M = 6007 slots, 10 backends</span>
+balance: min 600, max 601 slots (ideal 600)  →  max/mean <span class="g">1.000×</span>
+remove node9: keys moved <span class="y">10.94%</span>
+  unavoidable (node9's own keys):     10.00%
+  collateral churn (didn't have to):   <span class="y">0.93%</span></pre>
+  <p>Each backend generates a permutation of table slots (from two hashes: offset + skip) and backends take turns claiming their next preferred free slot until the table fills. Result measured above: <strong>balance is essentially perfect by construction</strong> (600 vs 601 slots), and lookup is a single array index — <code>table[hash % M]</code>, no binary search, exactly what a §14-grade per-packet path wants.</p>
+  <p>The price is printed too: removing a node moved 10.94% of keys when only 10.00% <em>had</em> to move — 0.93% of keys were collateral churn, remapped despite their backend surviving. The ring never does that; Maglev accepts it deliberately.</p>
+  <div class="whynot"><span class="t">WHY DOES GOOGLE'S L4 LB ACCEPT CHURN THE RING AVOIDS?</span>
+  <p>Because of what each system holds. A <em>cache</em> misplacement costs a miss — you want minimal movement, take the ring. An <em>L4 balancer</em> misplacement costs a live connection reset — but Maglev pairs the table with per-flow connection tracking, so established flows survive remaps and only <em>new</em> flows follow the new table; meanwhile per-packet lookup cost and perfect balance dominate the bill at millions of pps. Under ECMP, imbalance = one hot nginx box capping the whole tier (§03's knee, hit early). So: ring for stateful placement, Maglev-style tables for stateless per-packet dispatch with flow tracking as the safety net. Same family, different loss function — name the loss function and the choice makes itself.</p></div>
+
+  <!-- ============ COUNT-MIN SKETCH ============ -->
+  <h3>Part B · Count-min sketch, four experiments</h3>
+  <p>Setup: 1M requests from 100k client keys, zipf-distributed (few whales, long tail) — the honest shape of gateway traffic. Sketch: 4 rows × 2000 counters = <strong>31 KiB</strong>, vs ~3.8 MB for the exact Counter. Structure: on add, increment one counter per row (row's own hash); on read, take the <strong>min</strong> across rows.</p>
+
+  <h4>B1 — Heavy hitters: estimates vs truth</h4>
+  <pre class="term"><span class="hd">RUN — top clients, estimated from 31 KiB</span>
+   key      true   estimate   overcount
+   ip0   134,634    134,725         +91
+   ip1    63,421     63,557        +136
+   ip2    40,329     40,397         +68
+   ip3    29,403     29,532        +129
+   ...      (all 8 shown in source run: overcounts +62…+170)</pre>
+  <p>For the keys you actually care about — the whales — error is ~0.1–0.6%: collision noise from tail keys adds a few dozen counts to six-figure truths. The sketch is nearly exact precisely where precision matters, and that's structural: overcount magnitude is bounded by <em>other keys'</em> mass landing in your cells, which is the same for everyone — so it's relatively negligible for big counts and relatively brutal for small ones (B3).</p>
+
+  <h4>B2 — The one-sided guarantee, measured across all 100k keys</h4>
+  <pre class="term"><span class="hd">RUN — error direction and bound</span>
+underestimates: <span class="g">0</span>            (theory: impossible — counters only increment, min() of
+                              overestimates is still an overestimate)
+mean overcount: 100    max: 859
+within the ε·N = 1,359 bound: <span class="g">100.00%</span> of keys   (guarantee said ≥ 98.2%: 1 − e^−d)</pre>
+  <p>ε = e/w gives the additive error bound; d rows drive the failure probability down exponentially (each row is an independent chance for a clean min). Both knobs measured landing inside their promises. Recognize the family resemblance: <strong>this is the Bloom filter's one-sided error, generalized from membership to frequency.</strong> Bloom never says "absent" wrongly; CMS never says "smaller" wrongly.</p>
+
+  <h4>B3 — Where the error concentrates: the inflated minnow</h4>
+  <pre class="term"><span class="hd">RUN — worst-inflated key in the whole universe</span>
+key ip64982: true count <span class="g">1</span>  →  estimated <span class="y">860</span></pre>
+  <p>A key seen once, estimated at 860: all four of its row-cells happen to be shared with hot keys, and min() can only pick the least-polluted cell, not an unpolluted one. Absolute error (+859) is still inside ε·N — the guarantee never promised small <em>relative</em> error for small keys. Operational consequence: <strong>never use raw CMS estimates to punish small counts</strong> (e.g., "this IP made ~860 requests, throttle it" — it made one). CMS answers "is this key HUGE?"; for small-count decisions you need exact counters on the shortlist.</p>
+
+  <h4>B4 — The actual job: detection quality</h4>
+  <pre class="term"><span class="hd">RUN — flag every key estimated above 0.5% of the stream (5,000)</span>
+actual heavy hitters: 20    flagged: 20    missed: <span class="g">0</span>    false flags: <span class="g">0</span></pre>
+  <p>Perfect recall is <em>guaranteed</em> (no underestimates ⇒ no whale can hide under the threshold); perfect precision this run is luck-adjacent (a tail key inflated past 5,000 would be a false flag — and B3's 860 shows the mechanism idling). So the production pattern is the manual's master pattern yet again: <strong>CMS as the cheap always-on stage streaming candidates → exact counters kept only for the few flagged keys → §04's limiter or §06's scorer acts on exact numbers.</strong> 31 KiB buys you the right to be exact about only twenty keys instead of a hundred thousand.</p>
+
+  <details class="q"><summary><span class="qn">SRC</span>Both sources (ring+Maglev ~45 lines, CMS ~20 lines)</summary><div class="a">
+  <pre class="term"><span class="c"># --- consistent hash ring ---</span>
+class Ring:
+    def __init__(self, nodes, vnodes):
+        self.ring = sorted((H(f"{n}#v{v}"), n) for n in nodes for v in range(vnodes))
+        self.pts  = [p for p, _ in self.ring]
+    def owner(self, key_hash):
+        i = bisect.bisect(self.pts, key_hash) % len(self.ring)   <span class="c"># clockwise successor</span>
+        return self.ring[i][1]
+
+<span class="c"># --- minimal Maglev table ---</span>
+def maglev(nodes, M=6007):                       <span class="c"># M prime, M >> len(nodes)</span>
+    perm = {n: (H(n+"#off") % M, H(n+"#skip") % (M-1) + 1) for n in nodes}
+    table = [None]*M; nxt = {n: 0 for n in nodes}; filled = 0
+    while filled &lt; M:
+        for n in nodes:                          <span class="c"># round-robin turns = balance</span>
+            off, skip = perm[n]
+            while True:                          <span class="c"># next free slot in MY permutation</span>
+                c = (off + nxt[n]*skip) % M; nxt[n] += 1
+                if table[c] is None:
+                    table[c] = n; filled += 1; break
+            if filled == M: break
+    return table                                 <span class="c"># dispatch = table[hash(5tuple) % M]</span>
+
+<span class="c"># --- count-min sketch ---</span>
+class CMS:
+    def __init__(self, w, d):
+        self.w, self.d = w, d
+        self.t = [[0]*w for _ in range(d)]
+    def add(self, key, c=1):
+        for r in range(self.d):
+            self.t[r][H2(key, r, self.w)] += c
+    def est(self, key):                          <span class="c"># min across rows = least-polluted cell</span>
+        return min(self.t[r][H2(key, r, self.w)] for r in range(self.d))
+<span class="c"># production notes: decay for "hot NOW" — halve all counters every T seconds, or run
+# two alternating sketches (current+previous) and reset the older (§06's rebuild trick);
+# use conservative update (only bump cells equal to the current min) to shrink overcounts;
+# per-worker sketches merge by cell-wise addition — composable like §16's histograms</span></pre>
+  </div></details>
+
+  <div class="keyline"><span class="t">THE FOUR ALGORITHMS, ONE SHELF</span>
+  <p>Bloom: "have I seen this key?" — one-sided on membership. CMS: "how often?" — one-sided on frequency. Aho-Corasick: "which patterns occur?" — hard per-byte ceiling. Consistent hashing: "who owns this key when the fleet changes?" — bounded disruption. Four constant-ish-cost answers to the four questions a gateway asks about every single request, each trading a precisely characterized error for orders of magnitude in space or stability — and every one of them fronting an exact-but-expensive second stage. That shelf, plus knowing each one's loss function, is the algorithmic core of the whole manual.</p></div>
+</section>
+
+</main>
+<footer>
+  <div class="wrap">FIELD MANUAL · nginx / envoy / kubernetes / mTLS internals · built for interview-depth study · every diagram is inline SVG — view source to reuse.</div>
+</footer>
+</body>
+</html>

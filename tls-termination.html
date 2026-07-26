@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Where TLS terminates: Nginx vs Envoy vs mesh mTLS</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.11.0/dist/tabler-icons.min.css">
+<style>
+  :root{
+    --bg:#faf9f5; --surface:#ffffff; --surface-1:#f1efe8;
+    --text:#26251f; --text-2:#5f5e5a; --text-3:#908f88; --border:#dcdad0; --border-2:#c3c1b6;
+    --warn-bg:#faeeda; --warn:#854f0b; --warn-line:#ba7517;
+    --acc-bg:#e6f1fb; --acc:#185fa5; --acc-line:#378add;
+    --mono:"SF Mono",ui-monospace,Menlo,Consolas,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg:#1f1e1b; --surface:#2b2a26; --surface-1:#26251f;
+      --text:#eceae2; --text-2:#b7b5ab; --text-3:#8a897f; --border:#3b3a34; --border-2:#4c4b43;
+      --warn-bg:#412402; --warn:#fac775; --warn-line:#ef9f27;
+      --acc-bg:#042c53; --acc:#85b7eb; --acc-line:#378add;
+    }
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:var(--sans);line-height:1.55;
+       display:flex;justify-content:center;padding:28px 16px}
+  .wrap{width:100%;max-width:720px}
+  h1{font-size:20px;font-weight:500;margin:0 0 4px}
+  .sub{color:var(--text-2);font-size:14px;margin:0 0 20px}
+  .bar{display:flex;gap:8px;margin:0 0 14px;flex-wrap:wrap}
+  .bar button{padding:7px 16px;border-radius:8px;border:.5px solid var(--border-2);
+       background:transparent;color:var(--text-2);font-size:13px;cursor:pointer;font-family:inherit;
+       transition:.15s}
+  .bar button:hover{background:var(--surface-1)}
+  .bar button.on{background:var(--surface-1);border-color:var(--text-3);color:var(--text)}
+  .stage{background:var(--surface-1);border-radius:12px;padding:12px 8px 4px}
+  .hidden{display:none}
+  .cfg-head{display:flex;align-items:center;gap:8px;margin:16px 0 6px;font-size:13px;color:var(--text-2)}
+  pre{margin:0;padding:12px 14px;background:var(--surface);border:.5px solid var(--border);
+      border-radius:8px;font-family:var(--mono);font-size:12.5px;line-height:1.6;color:var(--text-2);
+      white-space:pre;overflow-x:auto}
+  .hi{color:var(--warn);font-weight:600}
+  .legend{display:flex;gap:16px;margin-top:12px;font-size:12.5px;color:var(--text-2);flex-wrap:wrap}
+  .legend i{vertical-align:-2px;font-size:14px}
+  .note{margin-top:18px;font-size:13.5px;color:var(--text-2);border-top:.5px solid var(--border);padding-top:14px}
+  .note b{color:var(--text);font-weight:500}
+  text{font-family:var(--sans)}
+  .t{font-size:14px;font-weight:500}
+  .ts{font-size:12px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Where TLS terminates</h1>
+  <p class="sub">Same traffic, three configs. Watch ciphertext (locked) become plaintext (open) at the boundary each file defines — and note you move that boundary by editing YAML, never app code.</p>
+
+  <div class="bar" id="modebar"></div>
+
+  <div class="stage">
+  <svg id="scene" width="100%" viewBox="0 0 680 250">
+    <g id="edge">
+      <rect x="120" y="108" width="200" height="34" rx="6" fill="var(--warn-bg)"/>
+      <rect x="320" y="108" width="240" height="34" rx="6" fill="var(--surface)" stroke="var(--border)" stroke-width=".5"/>
+
+      <rect x="30" y="95" width="90" height="60" rx="10" fill="var(--surface)" stroke="var(--border-2)" stroke-width=".5"/>
+      <text class="t" x="75" y="121" text-anchor="middle" dominant-baseline="central" fill="var(--text)">Client</text>
+      <text class="ts" x="75" y="137" text-anchor="middle" dominant-baseline="central" fill="var(--text-3)">browser</text>
+
+      <line x1="320" y1="88" x2="320" y2="162" stroke="var(--warn-line)" stroke-width="1" stroke-dasharray="4 4"/>
+      <rect x="272" y="66" width="96" height="20" rx="6" fill="var(--warn-bg)"/>
+      <text id="edge-node-t" class="ts" x="320" y="77" text-anchor="middle" dominant-baseline="central" fill="var(--warn)">terminates here</text>
+
+      <rect x="560" y="95" width="90" height="60" rx="10" fill="var(--surface)" stroke="var(--border-2)" stroke-width=".5"/>
+      <text class="t" x="605" y="121" text-anchor="middle" dominant-baseline="central" fill="var(--text)">App</text>
+      <text class="ts" x="605" y="137" text-anchor="middle" dominant-baseline="central" fill="var(--text-3)">upstream</text>
+
+      <text class="ts" x="220" y="162" text-anchor="middle" fill="var(--warn)">encrypted</text>
+      <text class="ts" x="440" y="162" text-anchor="middle" fill="var(--text-2)">plaintext</text>
+      <text id="edge-proxy-t" class="t" x="320" y="196" text-anchor="middle" fill="var(--text)">Nginx</text>
+
+      <g id="edge-packets"></g>
+    </g>
+
+    <g id="mesh" class="hidden">
+      <rect x="150" y="82" width="230" height="86" rx="12" fill="var(--surface-1)" stroke="var(--border-2)" stroke-width=".5"/>
+      <rect x="300" y="82" width="230" height="86" rx="12" fill="var(--surface-1)" stroke="var(--border-2)" stroke-width=".5"/>
+      <text class="ts" x="182" y="98" fill="var(--text-3)">Pod A</text>
+      <text class="ts" x="498" y="98" text-anchor="end" fill="var(--text-3)">Pod B</text>
+
+      <rect x="30" y="106" width="70" height="38" rx="8" fill="var(--surface)" stroke="var(--border)" stroke-width=".5"/>
+      <text class="ts" x="65" y="125" text-anchor="middle" dominant-baseline="central" fill="var(--text)">app A</text>
+      <rect x="112" y="106" width="66" height="38" rx="8" fill="var(--acc-bg)"/>
+      <text class="ts" x="145" y="121" text-anchor="middle" dominant-baseline="central" fill="var(--acc)">Envoy</text>
+      <text class="ts" x="145" y="133" text-anchor="middle" dominant-baseline="central" fill="var(--acc)">sidecar</text>
+
+      <rect x="502" y="106" width="66" height="38" rx="8" fill="var(--acc-bg)"/>
+      <text class="ts" x="535" y="121" text-anchor="middle" dominant-baseline="central" fill="var(--acc)">Envoy</text>
+      <text class="ts" x="535" y="133" text-anchor="middle" dominant-baseline="central" fill="var(--acc)">sidecar</text>
+      <rect x="580" y="106" width="70" height="38" rx="8" fill="var(--surface)" stroke="var(--border)" stroke-width=".5"/>
+      <text class="ts" x="615" y="125" text-anchor="middle" dominant-baseline="central" fill="var(--text)">app B</text>
+
+      <rect x="178" y="108" width="324" height="34" rx="6" fill="var(--acc-bg)"/>
+      <text class="ts" x="340" y="162" text-anchor="middle" fill="var(--acc)">encrypted + mutually authenticated</text>
+      <rect x="258" y="66" width="164" height="20" rx="6" fill="var(--acc-bg)"/>
+      <text class="ts" x="340" y="77" text-anchor="middle" dominant-baseline="central" fill="var(--acc)">PeerAuthentication: STRICT</text>
+      <text class="t" x="340" y="196" text-anchor="middle" fill="var(--text)">mesh mTLS</text>
+
+      <g id="mesh-packets"></g>
+    </g>
+  </svg>
+  </div>
+
+  <div class="cfg-head"><i class="ti ti-file-code"></i><span id="cfg-name">nginx.conf</span></div>
+  <pre id="cfg"></pre>
+
+  <div class="legend">
+    <span><i class="ti ti-lock" style="color:var(--warn-line)"></i> locked = ciphertext</span>
+    <span><i class="ti ti-lock-open" style="color:var(--text-3)"></i> open = plaintext</span>
+    <span><i class="ti ti-lock" style="color:var(--acc-line)"></i> mutual = both peers verified</span>
+  </div>
+
+  <p class="note"><b>The whole point:</b> in every mode the certificate and key are just files, and the security posture is a few lines of declarative config — an Nginx <span class="hi">server</span> block, an Envoy <span class="hi">transport_socket</span>, or a Kubernetes <span class="hi">Secret</span> plus a <span class="hi">PeerAuthentication</span> CRD. Flipping the mesh to <span class="hi">STRICT</span> encrypts and mutually authenticates every service-to-service hop without a single line changing inside app A or app B.</p>
+</div>
+
+<script>
+const NS="http://www.w3.org/2000/svg";
+const modes={
+  nginx:{proxy:"Nginx",node:"terminates here",cfgName:"nginx.conf — server block",
+    cfg:[["server {"],["    ","listen 443 ssl;"],["    ","ssl_certificate      /etc/nginx/tls/fullchain.pem;"],
+         ["    ","ssl_certificate_key  /etc/nginx/tls/privkey.pem;"],["    location / { proxy_pass http://app:8080; }"],["}"]]},
+  envoy:{proxy:"Envoy",node:"terminates here",cfgName:"envoy.yaml — listener",
+    cfg:[["listeners:"],["- address: { socket_address: { port_value: 443 } }"],["  filter_chains:"],
+         ["  - ","transport_socket:"],["      name: envoy.transport_sockets.tls"],["      typed_config:"],
+         ["        common_tls_context:"],["          ","tls_certificates:"],
+         ["          - certificate_chain: { filename: /certs/tls.crt }"],
+         ["            private_key:       { filename: /certs/tls.key }"]]},
+  mesh:{proxy:"mesh mTLS",node:"",cfgName:"secret + peerauthentication.yaml",
+    cfg:[["apiVersion: v1"],["kind: ","Secret","   type: kubernetes.io/tls"],
+         ["data: { tls.crt: <b64>, tls.key: <b64> }"],["---"],["apiVersion: security.istio.io/v1"],
+         ["kind: ","PeerAuthentication"],["spec:"],["  ","mtls: { mode: STRICT }"]]}
+};
+
+function renderCfg(m){
+  const pre=document.getElementById("cfg");
+  document.getElementById("cfg-name").textContent=m.cfgName;
+  pre.textContent="";
+  m.cfg.forEach(row=>{
+    const line=document.createElement("div");
+    if(row.length===1){ line.textContent=row[0]; }
+    else{
+      line.append(document.createTextNode(row[0]));
+      const hi=document.createElement("span"); hi.className="hi"; hi.textContent=row[1]; line.append(hi);
+      if(row[2]) line.append(document.createTextNode(row[2]));
+    }
+    pre.append(line);
+  });
+}
+
+let running=[];
+function clearPackets(id){
+  running.forEach(a=>a.cancel()); running=[];
+  const g=document.getElementById(id); while(g.firstChild) g.removeChild(g.firstChild);
+}
+function shackle(cx,cy){
+  const p=document.createElementNS(NS,"path");
+  p.setAttribute("d",`M${cx-3} ${cy-2}v-2a3 3 0 0 1 6 0v2`);
+  p.setAttribute("fill","none");p.setAttribute("stroke","#fff");p.setAttribute("stroke-width","1.4");
+  return p;
+}
+function flow(gid,x1,x2,y,count,kind,rev){
+  const g=document.getElementById(gid); const dist=x2-x1, dur=2600, gap=dur/count;
+  const mesh=gid==="mesh-packets";
+  for(let i=0;i<count;i++){
+    const wrap=document.createElementNS(NS,"g"); const startX=rev?x2:x1;
+    const c=document.createElementNS(NS,"circle");
+    c.setAttribute("cx",startX);c.setAttribute("cy",y);c.setAttribute("r","6.5");
+    if(kind==="lock"){
+      c.setAttribute("fill",mesh?"var(--acc-line)":"var(--warn-line)");
+      wrap.append(c,shackle(startX,y));
+    }else{
+      c.setAttribute("fill","none");c.setAttribute("stroke","var(--text-3)");c.setAttribute("stroke-width","1.4");
+      wrap.append(c);
+    }
+    g.append(wrap);
+    const d=rev?-dist:dist;
+    running.push(wrap.animate(
+      [{transform:"translateX(0)"},{transform:`translateX(${d}px)`}],
+      {duration:dur,iterations:Infinity,delay:-i*gap,easing:"linear"}));
+  }
+}
+
+function setMode(key){
+  const m=modes[key];
+  document.querySelectorAll("#modebar button").forEach(b=>b.classList.toggle("on",b.dataset.k===key));
+  renderCfg(m);
+  const edge=document.getElementById("edge"), mesh=document.getElementById("mesh");
+  clearPackets("edge-packets"); clearPackets("mesh-packets");
+  if(key==="mesh"){
+    edge.classList.add("hidden"); mesh.classList.remove("hidden");
+    flow("mesh-packets",184,496,125,4,"lock",false);
+    flow("mesh-packets",184,496,125,3,"lock",true);
+  }else{
+    mesh.classList.add("hidden"); edge.classList.remove("hidden");
+    document.getElementById("edge-proxy-t").textContent=m.proxy;
+    document.getElementById("edge-node-t").textContent=m.node;
+    flow("edge-packets",128,312,125,4,"lock",false);
+    flow("edge-packets",328,552,125,4,"open",false);
+  }
+}
+
+["nginx","envoy","mesh"].forEach(k=>{
+  const b=document.createElement("button"); b.dataset.k=k;
+  b.textContent={nginx:"Nginx",envoy:"Envoy",mesh:"Mesh mTLS"}[k];
+  b.onclick=()=>setMode(k);
+  document.getElementById("modebar").append(b);
+});
+setMode("nginx");
+</script>
+</body>
+</html>

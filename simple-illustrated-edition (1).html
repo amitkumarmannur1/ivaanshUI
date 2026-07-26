@@ -1,0 +1,724 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gateway Study — Simple Words, Many Pictures</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700&family=Atkinson+Hyperlegible:ital,wght@0,400;0,700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#FBF9F4; --ink:#22303A; --soft:#5C6B75; --card:#fff; --line:#E2DED3;
+  --green:#1B7A46; --green-bg:#EAF5EE; --blue:#2C5FB3; --blue-bg:#EBF1FB;
+  --red:#B5493A; --red-bg:#FBEFEC; --gold:#9A6B15; --gold-bg:#FAF3E3;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{font-family:'Atkinson Hyperlegible',sans-serif;background:var(--paper);color:var(--ink);font-size:18px;line-height:1.7}
+.wrap{max-width:800px;margin:0 auto;padding:0 20px}
+header.hero{padding:56px 0 30px;border-bottom:4px solid var(--ink)}
+.kicker{font-family:'IBM Plex Mono',monospace;font-size:12px;letter-spacing:.15em;color:var(--green);font-weight:600}
+h1{font-family:'Fraunces',serif;font-size:clamp(30px,5.5vw,46px);line-height:1.1;margin:12px 0 12px}
+.hero p{font-size:18px;color:var(--soft);max-width:620px}
+nav.toc{position:sticky;top:0;z-index:40;background:var(--ink);overflow-x:auto;white-space:nowrap}
+nav.toc::-webkit-scrollbar{display:none}
+nav.toc a{display:inline-block;color:#C6CDD3;font-family:'IBM Plex Mono',monospace;font-size:11.5px;padding:11px 11px;text-decoration:none}
+nav.toc a:hover{background:var(--green);color:#fff}
+section{padding:46px 0 8px}
+.lvl{font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:600;letter-spacing:.12em;color:#fff;background:var(--blue);padding:4px 10px;border-radius:20px;display:inline-block;margin-bottom:6px}
+.chip{font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:600;letter-spacing:.1em;color:#fff;background:var(--green);padding:4px 11px;border-radius:20px;display:inline-block}
+h2{font-family:'Fraunces',serif;font-size:clamp(24px,4vw,33px);line-height:1.15;margin:10px 0 8px}
+h3{font-family:'Fraunces',serif;font-size:21px;margin:30px 0 8px}
+p{margin-bottom:14px;max-width:66ch}
+strong{font-weight:700}
+.plain{background:var(--green-bg);border:1px solid #C4E0CE;border-radius:10px;padding:14px 18px;margin:16px 0}
+.plain .t{font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:600;letter-spacing:.12em;color:var(--green);display:block;margin-bottom:5px}
+.eg{background:var(--card);border:1px solid var(--line);border-left:5px solid var(--blue);border-radius:8px;padding:13px 17px;margin:14px 0}
+.eg .t{font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:600;letter-spacing:.12em;color:var(--blue);display:block;margin-bottom:4px}
+.why{background:var(--gold-bg);border:1px solid #E8D5A8;border-left:5px solid var(--gold);border-radius:8px;padding:13px 17px;margin:14px 0}
+.why .t{font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:600;letter-spacing:.12em;color:var(--gold);display:block;margin-bottom:4px}
+.trap{background:var(--red-bg);border:1px solid #EBC7C0;border-left:5px solid var(--red);border-radius:8px;padding:13px 17px;margin:14px 0}
+.trap .t{font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:600;letter-spacing:.12em;color:var(--red);display:block;margin-bottom:4px}
+.eg p,.why p,.plain p,.trap p{margin-bottom:8px}
+.eg p:last-child,.why p:last-child,.plain p:last-child,.trap p:last-child{margin-bottom:0}
+ul,ol{margin:0 0 15px 22px;max-width:64ch} li{margin-bottom:7px}
+table{border-collapse:collapse;width:100%;margin:14px 0;font-size:15px;background:var(--card);border:1px solid var(--line)}
+th{font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.06em;text-transform:uppercase;text-align:left;background:var(--ink);color:#EFEBE2;padding:9px 12px}
+td{padding:9px 12px;border-top:1px solid var(--line);vertical-align:top}
+tr:nth-child(even) td{background:#F7F4EC}
+figure{margin:20px 0;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px;overflow-x:auto}
+figcaption{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--soft);margin-top:8px}
+svg{display:block;max-width:100%;height:auto}
+svg text{font-family:'Atkinson Hyperlegible',sans-serif}
+.flow{stroke-dasharray:6 7;animation:dash 1.2s linear infinite}
+@keyframes dash{to{stroke-dashoffset:-13}}
+@media(prefers-reduced-motion:reduce){.flow{animation:none}}
+.divider{height:1px;background:var(--line);margin:40px 0 0}
+footer{border-top:4px solid var(--ink);margin-top:56px;padding:24px 0 56px;color:var(--soft);font-size:14px}
+code{font-family:'IBM Plex Mono',monospace;font-size:.86em;background:#F0EDE4;border:1px solid var(--line);border-radius:4px;padding:1px 5px}
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="wrap">
+    <span class="kicker">SIMPLE WORDS · A PICTURE FOR EVERY IDEA · STEP BY STEP</span>
+    <h1>The Gateway Study, rebuilt from zero.</h1>
+    <p>Short sentences. Everyday words. One idea at a time, in the right order — each part only uses what came before it. Every short word like DNS or TLS is explained where it appears. If you can read a bus map, you can read this.</p>
+  </div>
+</header>
+
+<nav class="toc">
+  <div class="wrap" style="padding:0">
+    <a href="#p1">1 SERVER</a><a href="#p2">2 FIND IT</a><a href="#p3">3 SHARE WORK</a><a href="#p4">4 NGINX</a><a href="#p5">5 FAST</a><a href="#p6">6 MEASURE</a><a href="#p7">7 LIMITS</a><a href="#p8">8 IDENTITY</a><a href="#p9">9 BAD TRAFFIC</a><a href="#p10">10 BLOOM</a><a href="#p11">11 K8S</a><a href="#p12">12 SIDECAR</a><a href="#p13">13 mTLS</a><a href="#p14">14 AI GATE</a><a href="#p15">15 RECAP</a>
+  </div>
+</nav>
+
+<main class="wrap">
+
+<!-- ============ PART 1 ============ -->
+<section id="p1">
+  <span class="lvl">LEVEL 1 · FOUNDATIONS</span><br>
+  <span class="chip">PART 1</span>
+  <h2>What is a server?</h2>
+  <p>A server is just a computer. It sits in a big building called a data center. Its job: answer questions from phones and laptops.</p>
+  <p>You tap "refresh" in an app. Your phone sends a small message: "give me my feed." A server reads it and sends the feed back. That's the whole game. Everything else in this study is about doing that <strong>fast</strong>, <strong>safely</strong>, and <strong>for millions of people at once</strong>.</p>
+  <figure>
+  <svg viewBox="0 0 760 150" role="img" aria-label="Phone sends a question, server sends an answer">
+    <defs><marker id="m1" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto"><path d="M0,0 L9,4.5 L0,9 z" fill="#22303A"/></marker></defs>
+    <g font-size="14" fill="#22303A">
+      <rect x="30" y="40" width="150" height="70" rx="10" fill="#fff" stroke="#22303A" stroke-width="2"/>
+      <text x="105" y="70" text-anchor="middle" font-weight="bold">Your phone</text>
+      <text x="105" y="92" text-anchor="middle" font-size="12" fill="#5C6B75">"give me my feed"</text>
+      <rect x="560" y="40" width="160" height="70" rx="10" fill="#EAF5EE" stroke="#1B7A46" stroke-width="2"/>
+      <text x="640" y="70" text-anchor="middle" font-weight="bold" fill="#1B7A46">Server</text>
+      <text x="640" y="92" text-anchor="middle" font-size="12" fill="#1B7A46">a computer in a building</text>
+      <line class="flow" x1="180" y1="60" x2="552" y2="60" stroke="#2C5FB3" stroke-width="2.5" marker-end="url(#m1)"/>
+      <text x="366" y="48" text-anchor="middle" font-size="12" fill="#2C5FB3">question →</text>
+      <line class="flow" x1="560" y1="95" x2="188" y2="95" stroke="#1B7A46" stroke-width="2.5" marker-end="url(#m1)"/>
+      <text x="366" y="118" text-anchor="middle" font-size="12" fill="#1B7A46">← answer</text>
+    </g>
+  </svg>
+  <figcaption>PICTURE 1 — The whole internet, in one line: question goes out, answer comes back.</figcaption>
+  </figure>
+  <div class="trap"><span class="t">FIX THIS IDEA FIRST</span>
+  <p>A big website is not one computer. It is hundreds of the same computer, in many buildings, in many countries. They all give the same answers. The next two parts show how your message finds one of them.</p></div>
+</section>
+<div class="divider"></div>
+
+<!-- ============ PART 2 ============ -->
+<section id="p2">
+  <span class="lvl">LEVEL 1 · FOUNDATIONS</span><br>
+  <span class="chip">PART 2</span>
+  <h2>How your message finds the server</h2>
+
+  <h3>Step 1: get the number (DNS)</h3>
+  <p>The internet does not deliver to names like <code>shop.com</code>. It delivers to numbers, like <code>203.0.113.5</code>. That number is called an <strong>IP address</strong> (IP = Internet Protocol). Think of it as a street address for a computer.</p>
+  <p>So first, your phone asks a helper: "What number is shop.com?" That helper is <strong>DNS</strong> (Domain Name System). DNS is the internet's phone book. Name in, number out.</p>
+  <div class="eg"><span class="t">EXAMPLE 1</span><p>You tap "Mom" in your contacts. The phone finds her number and dials it. You never see the number. DNS does the same for websites.</p></div>
+  <div class="eg"><span class="t">EXAMPLE 2</span><p>You ask a receptionist: "Which floor is the dentist on?" You need the floor number before the lift can take you there. DNS gives you that number.</p></div>
+  <figure>
+  <svg viewBox="0 0 760 130" role="img" aria-label="Phone asks DNS for the number, then sends the message to that number">
+    <g font-size="13" fill="#22303A">
+      <rect x="20" y="40" width="130" height="60" rx="9" fill="#fff" stroke="#22303A" stroke-width="2"/><text x="85" y="75" text-anchor="middle" font-weight="bold">Phone</text>
+      <rect x="300" y="12" width="180" height="52" rx="9" fill="#EBF1FB" stroke="#2C5FB3" stroke-width="2"/><text x="390" y="34" text-anchor="middle" font-weight="bold" fill="#2C5FB3">DNS = phone book</text><text x="390" y="52" text-anchor="middle" font-size="11" fill="#2C5FB3">"shop.com = 203.0.113.5"</text>
+      <rect x="580" y="55" width="160" height="60" rx="9" fill="#EAF5EE" stroke="#1B7A46" stroke-width="2"/><text x="660" y="82" text-anchor="middle" font-weight="bold" fill="#1B7A46">203.0.113.5</text><text x="660" y="100" text-anchor="middle" font-size="11" fill="#1B7A46">the server's address</text>
+      <line class="flow" x1="150" y1="55" x2="295" y2="38" stroke="#2C5FB3" stroke-width="2" marker-end="url(#m1)"/>
+      <text x="200" y="30" font-size="11" fill="#2C5FB3">1. "what's the number?"</text>
+      <line class="flow" x1="150" y1="85" x2="573" y2="85" stroke="#1B7A46" stroke-width="2" marker-end="url(#m1)"/>
+      <text x="330" y="105" font-size="11" fill="#1B7A46">2. send the real message to that number</text>
+    </g>
+  </svg>
+  <figcaption>PICTURE 2 — Two steps: look up the number, then send to the number.</figcaption>
+  </figure>
+
+  <h3>Step 2: reach the nearest building (Anycast)</h3>
+  <p>Big companies do a smart trick. They put the <strong>same address</strong> on many buildings around the world. The internet then delivers your message to the <strong>closest</strong> one. This trick is called <strong>Anycast</strong> ("any one of these buildings will do — pick the nearest").</p>
+  <div class="eg"><span class="t">EXAMPLE 1</span><p>A pizza chain has one phone number for the whole country. When you call it, you reach the branch nearest to you. Same number, many kitchens.</p></div>
+  <div class="eg"><span class="t">EXAMPLE 2</span><p>Post boxes. Every red post box accepts your letter. You use the closest one. You don't walk to one special post box across the city.</p></div>
+  <figure>
+  <svg viewBox="0 0 760 160" role="img" aria-label="Same address on many buildings, each user goes to the nearest">
+    <g font-size="12" fill="#22303A">
+      <rect x="60" y="20" width="140" height="50" rx="8" fill="#EAF5EE" stroke="#1B7A46" stroke-width="2"/><text x="130" y="42" text-anchor="middle" font-weight="bold" fill="#1B7A46">Building: London</text><text x="130" y="60" text-anchor="middle" font-size="11">address 203.0.113.5</text>
+      <rect x="310" y="20" width="140" height="50" rx="8" fill="#EAF5EE" stroke="#1B7A46" stroke-width="2"/><text x="380" y="42" text-anchor="middle" font-weight="bold" fill="#1B7A46">Building: Delhi</text><text x="380" y="60" text-anchor="middle" font-size="11">address 203.0.113.5</text>
+      <rect x="560" y="20" width="140" height="50" rx="8" fill="#EAF5EE" stroke="#1B7A46" stroke-width="2"/><text x="630" y="42" text-anchor="middle" font-weight="bold" fill="#1B7A46">Building: Tokyo</text><text x="630" y="60" text-anchor="middle" font-size="11">address 203.0.113.5</text>
+      <circle cx="130" cy="130" r="14" fill="#2C5FB3"/><text x="130" y="158" text-anchor="middle" font-size="11">user in UK</text>
+      <circle cx="380" cy="130" r="14" fill="#2C5FB3"/><text x="380" y="158" text-anchor="middle" font-size="11">user in India</text>
+      <circle cx="630" cy="130" r="14" fill="#2C5FB3"/><text x="630" y="158" text-anchor="middle" font-size="11">user in Japan</text>
+      <line class="flow" x1="130" y1="116" x2="130" y2="74" stroke="#2C5FB3" stroke-width="2" marker-end="url(#m1)"/>
+      <line class="flow" x1="380" y1="116" x2="380" y2="74" stroke="#2C5FB3" stroke-width="2" marker-end="url(#m1)"/>
+      <line class="flow" x1="630" y1="116" x2="630" y2="74" stroke="#2C5FB3" stroke-width="2" marker-end="url(#m1)"/>
+    </g>
+  </svg>
+  <figcaption>PICTURE 3 — One address, three buildings. Each person reaches the nearest one. Nobody crosses the world.</figcaption>
+  </figure>
+  <div class="why"><span class="t">WHY DO IT THIS WAY?</span>
+  <p><strong>Speed.</strong> A message to a nearby building comes back much faster than one sent across the ocean. Distance costs time. No code can fix distance.</p>
+  <p><strong>Safety.</strong> Attackers sometimes flood a website with millions of fake messages to knock it down. (This attack is called a <strong>DDoS</strong> — Distributed Denial of Service. Plain words: a fake crowd jamming the door.) With one building, the flood hits one door. With forty buildings sharing one address, the flood splits into forty small floods. Each building barely feels it.</p></div>
+</section>
+<div class="divider"></div>
+
+<!-- ============ PART 3 ============ -->
+<section id="p3">
+  <span class="lvl">LEVEL 1 · FOUNDATIONS</span><br>
+  <span class="chip">PART 3</span>
+  <h2>Sharing the work: the load balancer</h2>
+  <p>Your message reached the building. Inside are hundreds of servers. One machine at the door hands your message to one of them. That machine is the <strong>load balancer</strong>. Plain words: a traffic officer. "Load" = work. "Balance" = spread it evenly.</p>
+  <div class="eg"><span class="t">EXAMPLE 1</span><p>A supermarket with 20 tills and one staff member pointing: "You — till 7. You — till 3." Without them, everyone queues at till 1 and 19 tills sit empty.</p></div>
+  <div class="eg"><span class="t">EXAMPLE 2</span><p>A bank with one "take a ticket" machine. The machine spreads customers across all open counters. The machine itself does no banking. It only points.</p></div>
+  <figure>
+  <svg viewBox="0 0 760 170" role="img" aria-label="Load balancer spreads messages across servers">
+    <g font-size="13" fill="#22303A">
+      <circle cx="60" cy="55" r="12" fill="#2C5FB3"/><circle cx="60" cy="90" r="12" fill="#2C5FB3"/><circle cx="60" cy="125" r="12" fill="#2C5FB3"/>
+      <text x="60" y="155" text-anchor="middle" font-size="11">visitors</text>
+      <rect x="200" y="60" width="170" height="60" rx="9" fill="#EBF1FB" stroke="#2C5FB3" stroke-width="2"/>
+      <text x="285" y="86" text-anchor="middle" font-weight="bold" fill="#2C5FB3">Load balancer</text>
+      <text x="285" y="105" text-anchor="middle" font-size="11" fill="#2C5FB3">the traffic officer</text>
+      <rect x="540" y="18" width="150" height="42" rx="8" fill="#EAF5EE" stroke="#1B7A46" stroke-width="2"/><text x="615" y="44" text-anchor="middle" fill="#1B7A46">Server 1</text>
+      <rect x="540" y="70" width="150" height="42" rx="8" fill="#EAF5EE" stroke="#1B7A46" stroke-width="2"/><text x="615" y="96" text-anchor="middle" fill="#1B7A46">Server 2</text>
+      <rect x="540" y="122" width="150" height="42" rx="8" fill="#EAF5EE" stroke="#1B7A46" stroke-width="2"/><text x="615" y="148" text-anchor="middle" fill="#1B7A46">Server 3</text>
+      <line class="flow" x1="72" y1="90" x2="195" y2="90" stroke="#2C5FB3" stroke-width="2" marker-end="url(#m1)"/>
+      <line class="flow" x1="370" y1="75" x2="533" y2="40" stroke="#1B7A46" stroke-width="2" marker-end="url(#m1)"/>
+      <line class="flow" x1="370" y1="90" x2="533" y2="91" stroke="#1B7A46" stroke-width="2" marker-end="url(#m1)"/>
+      <line class="flow" x1="370" y1="105" x2="533" y2="142" stroke="#1B7A46" stroke-width="2" marker-end="url(#m1)"/>
+    </g>
+  </svg>
+  <figcaption>PICTURE 4 — The officer points; the servers work. No server drowns while others sit idle.</figcaption>
+  </figure>
+  <div class="why"><span class="t">WHY A SEPARATE OFFICER? WHY NOT LET SERVERS SHARE ON THEIR OWN?</span>
+  <p>Pointing is cheap. Answering is expensive. One cheap machine can point millions of times a second. So you put one cheap "pointer" in front of many expensive "answerers." Also, servers can now be added or removed freely. The officer just updates its list. Visitors never notice.</p></div>
+  <div class="plain"><span class="t">WHERE WE ARE</span>
+  <p>Phone book gave us the number (Part 2). Nearest building took us in (Part 2). The officer picked a server (Part 3). Now we zoom into that one server. The program waiting there is called <strong>Nginx</strong>.</p></div>
+</section>
+<div class="divider"></div>
+
+<!-- ============ PART 4 ============ -->
+<section id="p4">
+  <span class="lvl">LEVEL 2 · THE FRONT DOOR</span><br>
+  <span class="chip">PART 4</span>
+  <h2>Nginx: one waiter, thousands of tables</h2>
+  <p><strong>Nginx</strong> (say "engine-x") is the program on the server that receives your message. It answers it, or passes it to the right app behind it. Its fame: it serves tens of thousands of people at the same time, on one computer.</p>
+
+  <h3>The old way (and why it broke)</h3>
+  <p>Older software gave each visitor their own helper inside the computer. One visitor, one helper. Sounds kind. But most visitors spend most of their time <strong>waiting</strong> — their phone is slow, their network is slow. So you get 10,000 helpers, and 9,900 of them are standing still, doing nothing, but still using memory.</p>
+  <div class="eg"><span class="t">EXAMPLE</span><p>A call center hires one worker per call. Rule: "stay on your call, even during silence." Customer says "hold on, let me find my card…" — the worker just waits. Hire 10,000 workers for 10,000 calls, and your office is full of people listening to silence. That is the old way. It falls over in a crowd.</p></div>
+
+  <h3>The Nginx way</h3>
+  <p>Nginx keeps only a few workers — usually one per <strong>CPU core</strong>. (CPU = the computer's brain. A core = one lane of that brain.) Each worker asks the computer, over and over: <strong>"Which of my visitors is ready for me right now?"</strong> It helps only those. Then asks again. It never stands and waits for anyone.</p>
+  <div class="eg"><span class="t">EXAMPLE 1</span><p>A good waiter with 20 tables. They do not stand frozen at table 1. They walk the room and stop only where a hand is up. One waiter, 20 tables, nobody ignored.</p></div>
+  <div class="eg"><span class="t">EXAMPLE 2</span><p>A chess master plays 20 people at once. At each board they move in five seconds and walk on. The other players think for minutes. The waiting belongs to the players, not the master. That is how one Nginx worker handles thousands of visitors: the waiting belongs to the visitors.</p></div>
+  <figure>
+  <svg viewBox="0 0 760 190" role="img" aria-label="Old way many idle helpers, nginx way one active worker">
+    <g font-size="12" fill="#22303A">
+      <text x="190" y="24" text-anchor="middle" font-weight="bold" font-size="14">OLD WAY</text>
+      <rect x="40" y="36" width="300" height="70" rx="9" fill="#FBEFEC" stroke="#B5493A" stroke-width="1.5"/>
+      <g font-size="10.5">
+        <circle cx="75" cy="60" r="9" fill="#B5493A"/><text x="75" y="92" text-anchor="middle" fill="#B5493A">waiting</text>
+        <circle cx="130" cy="60" r="9" fill="#B5493A"/><text x="130" y="92" text-anchor="middle" fill="#B5493A">waiting</text>
+        <circle cx="185" cy="60" r="9" fill="#1B7A46"/><text x="185" y="92" text-anchor="middle" fill="#1B7A46">working</text>
+        <circle cx="240" cy="60" r="9" fill="#B5493A"/><text x="240" y="92" text-anchor="middle" fill="#B5493A">waiting</text>
+        <circle cx="295" cy="60" r="9" fill="#B5493A"/><text x="295" y="92" text-anchor="middle" fill="#B5493A">waiting</text>
+      </g>
+      <text x="190" y="130" text-anchor="middle" font-size="11" fill="#B5493A">5 helpers paid, 1 working</text>
+      <text x="565" y="24" text-anchor="middle" font-weight="bold" font-size="14">NGINX WAY</text>
+      <rect x="420" y="36" width="300" height="70" rx="9" fill="#EAF5EE" stroke="#1B7A46" stroke-width="1.5"/>
+      <circle cx="565" cy="70" r="14" fill="#1B7A46"/><text x="565" y="74" text-anchor="middle" fill="#fff" font-size="10">1</text>
+      <g fill="#5C6B75"><circle cx="470" cy="55" r="7"/><circle cx="510" cy="90" r="7"/><circle cx="625" cy="52" r="7"/><circle cx="670" cy="88" r="7"/></g>
+      <line class="flow" x1="565" y1="70" x2="625" y2="52" stroke="#1B7A46" stroke-width="2"/>
+      <text x="565" y="130" text-anchor="middle" font-size="11" fill="#1B7A46">1 worker, goes only to raised hands</text>
+      <text x="380" y="170" text-anchor="middle" font-size="12" fill="#5C6B75">Same crowd. Left: pay people to wait. Right: pay one person to act.</text>
+    </g>
+  </svg>
+  <figcaption>PICTURE 5 — The whole reason Nginx is famous, in one picture.</figcaption>
+  </figure>
+
+  <h3>The boss and the workers</h3>
+  <p>Nginx runs as one <strong>boss</strong> plus a few <strong>workers</strong>. The boss never talks to visitors. The boss only: reads the settings, opens the front door, starts workers, and restarts any worker that crashes.</p>
+  <figure>
+  <svg viewBox="0 0 760 160" role="img" aria-label="Boss process on top, workers below, visitors handled by workers">
+    <g font-size="13" fill="#22303A">
+      <rect x="290" y="14" width="180" height="48" rx="9" fill="#22303A"/><text x="380" y="34" text-anchor="middle" fill="#fff" font-weight="bold">BOSS</text><text x="380" y="52" text-anchor="middle" fill="#C6CDD3" font-size="10.5">settings · doors · restarts</text>
+      <rect x="90" y="100" width="150" height="46" rx="9" fill="#EAF5EE" stroke="#1B7A46" stroke-width="2"/><text x="165" y="128" text-anchor="middle" fill="#1B7A46">Worker 1</text>
+      <rect x="305" y="100" width="150" height="46" rx="9" fill="#EAF5EE" stroke="#1B7A46" stroke-width="2"/><text x="380" y="128" text-anchor="middle" fill="#1B7A46">Worker 2</text>
+      <rect x="520" y="100" width="150" height="46" rx="9" fill="#EAF5EE" stroke="#1B7A46" stroke-width="2"/><text x="595" y="128" text-anchor="middle" fill="#1B7A46">Worker 3</text>
+      <line x1="380" y1="62" x2="165" y2="98" stroke="#22303A" stroke-width="1.5"/>
+      <line x1="380" y1="62" x2="380" y2="98" stroke="#22303A" stroke-width="1.5"/>
+      <line x1="380" y1="62" x2="595" y2="98" stroke="#22303A" stroke-width="1.5"/>
+    </g>
+  </svg>
+  <figcaption>PICTURE 6 — The boss supervises. The workers serve. A crashed worker is replaced quietly.</figcaption>
+  </figure>
+  <div class="why"><span class="t">WHY SPLIT BOSS AND WORKERS?</span>
+  <p><strong>Safety.</strong> The workers touch messages from strangers all day. So workers get low power. The boss keeps the keys. If a stranger tricks a worker, the damage stays small. Like a shop where cashiers cannot open the safe — only the manager can.</p>
+  <p><strong>Updates with no downtime.</strong> New settings? The boss starts <strong>new</strong> workers with the new settings. The <strong>old</strong> workers finish serving their current visitors, then retire. Nobody is cut off mid-answer. Like a shift change of waiters — the restaurant never closes.</p></div>
+  <div class="trap"><span class="t">COMMON MISTAKE</span>
+  <p>"One worker per core" does NOT mean few visitors. One worker handles tens of thousands of visitors, because it only does the tiny active bits. Workers match brain-lanes, not visitors.</p></div>
+</section>
+<div class="divider"></div>
+
+<!-- ============ PART 5 ============ -->
+<section id="p5">
+  <span class="lvl">LEVEL 2 · THE FRONT DOOR</span><br>
+  <span class="chip">PART 5</span>
+  <h2>Making it fast: stop repeating the handshake</h2>
+  <p>Every private (locked) connection starts with a <strong>handshake</strong>. The two sides quickly agree on a secret code, so nobody else can read the messages. This locking is called <strong>TLS</strong> (Transport Layer Security). It is the padlock icon in your browser. The handshake uses heavy math. Heavy math costs real computer effort.</p>
+  <p>Here is the biggest speed rule at the front door: <strong>do the handshake once, then reuse it.</strong> Keep the connection open for the next requests. For a returning visitor, continue the old agreement instead of redoing the math.</p>
+  <div class="eg"><span class="t">EXAMPLE 1</span><p>Entering an office building: first visit, you show ID and fill a form. Then you get a badge. After that you just tap the badge. Imagine filling the form again for every room — you would get nothing done. Reusing a connection is tapping the badge.</p></div>
+  <div class="eg"><span class="t">EXAMPLE 2</span><p>Calling a friend: you say hello once, then talk about ten things. You do not hang up and redial between every sentence.</p></div>
+  <figure>
+  <svg viewBox="0 0 760 170" role="img" aria-label="Bad: handshake per request. Good: one handshake then many requests">
+    <g font-size="12" fill="#22303A">
+      <text x="190" y="22" text-anchor="middle" font-weight="bold" font-size="14">SLOW</text>
+      <g font-size="11">
+        <rect x="50" y="36" width="280" height="26" rx="5" fill="#FBEFEC" stroke="#B5493A"/><text x="190" y="53" text-anchor="middle" fill="#B5493A">handshake … request 1</text>
+        <rect x="50" y="70" width="280" height="26" rx="5" fill="#FBEFEC" stroke="#B5493A"/><text x="190" y="87" text-anchor="middle" fill="#B5493A">handshake … request 2</text>
+        <rect x="50" y="104" width="280" height="26" rx="5" fill="#FBEFEC" stroke="#B5493A"/><text x="190" y="121" text-anchor="middle" fill="#B5493A">handshake … request 3</text>
+      </g>
+      <text x="190" y="152" text-anchor="middle" font-size="11" fill="#B5493A">heavy math three times</text>
+      <text x="570" y="22" text-anchor="middle" font-weight="bold" font-size="14">FAST</text>
+      <g font-size="11">
+        <rect x="430" y="36" width="280" height="26" rx="5" fill="#EAF5EE" stroke="#1B7A46"/><text x="570" y="53" text-anchor="middle" fill="#1B7A46">handshake (once)</text>
+        <rect x="430" y="70" width="280" height="26" rx="5" fill="#EAF5EE" stroke="#1B7A46"/><text x="570" y="87" text-anchor="middle" fill="#1B7A46">request 1 · request 2 · request 3</text>
+        <rect x="430" y="104" width="280" height="26" rx="5" fill="#EAF5EE" stroke="#1B7A46"/><text x="570" y="121" text-anchor="middle" fill="#1B7A46">…request 100, same connection</text>
+      </g>
+      <text x="570" y="152" text-anchor="middle" font-size="11" fill="#1B7A46">heavy math once</text>
+    </g>
+  </svg>
+  <figcaption>PICTURE 7 — Same work delivered. The fast side paid for the expensive part once.</figcaption>
+  </figure>
+  <div class="plain"><span class="t">TWO MORE HONEST SPEED RULES</span>
+  <p><strong>Keep a copy of popular answers.</strong> If 1,000 people ask for the same picture, fetch it once, keep it close, hand out copies. This is called a <strong>cache</strong> (a nearby copy). The fastest work is work you skip.</p>
+  <p><strong>Don't hire extra cooks for a small kitchen.</strong> More workers than brain-lanes just makes the computer waste time switching between them. Match workers to cores. (Part 4 said this. It matters enough to say twice.)</p></div>
+</section>
+<div class="divider"></div>
+
+<!-- ============ PART 6 ============ -->
+<section id="p6">
+  <span class="lvl">LEVEL 2 · THE FRONT DOOR</span><br>
+  <span class="chip">PART 6</span>
+  <h2>Measuring speed the honest way</h2>
+  <p>How do you know your system is fast? Not by feeling. By numbers. And by the <strong>right</strong> number.</p>
+
+  <h3>Look at the unlucky user, not the average</h3>
+  <p>Engineers use a number called <strong>p99</strong>. Plain words: "out of every 100 users, how slow was it for the unluckiest one?" If p99 is 2 seconds, then 1 user in 100 waited 2 seconds or more.</p>
+  <div class="eg"><span class="t">EXAMPLE</span><p>A restaurant serves 99 meals in 5 minutes and 1 meal in 40 minutes. The average is about 5 minutes. Sounds great. But one customer is furious. The average hid them. The p99 number is that customer.</p></div>
+  <figure>
+  <svg viewBox="0 0 760 150" role="img" aria-label="100 users shown as bars, 99 short and fast, one tall and slow">
+    <g font-size="12" fill="#22303A">
+      <g fill="#1B7A46">
+        <rect x="40" y="90" width="10" height="20"/><rect x="55" y="88" width="10" height="22"/><rect x="70" y="92" width="10" height="18"/><rect x="85" y="86" width="10" height="24"/><rect x="100" y="90" width="10" height="20"/><rect x="115" y="89" width="10" height="21"/><rect x="130" y="91" width="10" height="19"/><rect x="145" y="87" width="10" height="23"/><rect x="160" y="90" width="10" height="20"/><rect x="175" y="92" width="10" height="18"/><rect x="190" y="88" width="10" height="22"/><rect x="205" y="90" width="10" height="20"/><rect x="220" y="86" width="10" height="24"/><rect x="235" y="91" width="10" height="19"/><rect x="250" y="89" width="10" height="21"/><rect x="265" y="90" width="10" height="20"/><rect x="280" y="92" width="10" height="18"/><rect x="295" y="88" width="10" height="22"/><rect x="310" y="90" width="10" height="20"/><rect x="325" y="87" width="10" height="23"/><rect x="340" y="90" width="10" height="20"/><rect x="355" y="91" width="10" height="19"/><rect x="370" y="89" width="10" height="21"/><rect x="385" y="90" width="10" height="20"/><rect x="400" y="88" width="10" height="22"/><rect x="415" y="90" width="10" height="20"/><rect x="430" y="92" width="10" height="18"/><rect x="445" y="86" width="10" height="24"/><rect x="460" y="90" width="10" height="20"/><rect x="475" y="89" width="10" height="21"/><rect x="490" y="91" width="10" height="19"/><rect x="505" y="88" width="10" height="22"/><rect x="520" y="90" width="10" height="20"/><rect x="535" y="90" width="10" height="20"/><rect x="550" y="87" width="10" height="23"/><rect x="565" y="90" width="10" height="20"/><rect x="580" y="89" width="10" height="21"/><rect x="595" y="91" width="10" height="19"/><rect x="610" y="90" width="10" height="20"/><rect x="625" y="88" width="10" height="22"/><rect x="640" y="90" width="10" height="20"/>
+      </g>
+      <rect x="672" y="20" width="12" height="90" fill="#B5493A"/>
+      <text x="678" y="130" text-anchor="middle" font-size="11" fill="#B5493A">the p99 user</text>
+      <text x="340" y="130" text-anchor="middle" font-size="11" fill="#1B7A46">most users: quick</text>
+      <line x1="30" y1="110" x2="730" y2="110" stroke="#22303A" stroke-width="1.5"/>
+      <text x="380" y="20" font-size="12" fill="#5C6B75">bar height = waiting time</text>
+    </g>
+  </svg>
+  <figcaption>PICTURE 8 — The average looks fine. The red bar is the truth someone lived.</figcaption>
+  </figure>
+  <div class="why"><span class="t">WHY THE UNLUCKY NUMBER MATTERS EVEN MORE THAN IT SEEMS</span>
+  <p>One app screen is not one request. Behind the scenes it is often <strong>fifty</strong> small requests (profile, messages, pictures, prices…). If each one has a 1-in-100 chance of being slow, the chance that <strong>at least one</strong> of the fifty is slow is about <strong>40%</strong>. So four in ten screens feel slow — even though every single part is "99% fine." The average hides this. The unlucky number catches it. This is why serious teams promise "99% of requests finish under X" — never averages.</p></div>
+
+  <h3>Test with real pressure</h3>
+  <p>To find your limit, you blast the server with fake traffic and watch when it struggles. One trap: some test tools politely wait for each answer before sending the next question. When the server slows down, the polite tool also slows down — and hides the problem.</p>
+  <div class="eg"><span class="t">EXAMPLE</span><p>Testing a bridge for rush hour by sending one car, waiting for it to cross, then sending the next. The bridge never feels rush hour. It "passes" the test and fails in real life. A good test sends cars at a steady real-world rate, no matter what. Real users do not politely wait for each other either.</p></div>
+  <div class="trap"><span class="t">COMMON MISTAKE</span>
+  <p>"We handle 100,000 requests per second!" is not the goal. The real question: at what load does the unlucky user start suffering? Then run at about 70–80% of that point. Leave room for surprise crowds — like not driving with the fuel needle on empty.</p></div>
+</section>
+<div class="divider"></div>
+
+<!-- ============ PART 7 ============ -->
+<section id="p7">
+  <span class="lvl">LEVEL 3 · PROTECTION</span><br>
+  <span class="chip">PART 7</span>
+  <h2>Rate limits: saying "that's enough for now"</h2>
+  <p>A <strong>rate limit</strong> caps how many requests one visitor can make in a set time. Go over, and the extra requests get a polite "try again soon." This protects the system from floods — from attackers, or just from a buggy app stuck in a loop.</p>
+
+  <h3>Two counting styles, two goals</h3>
+  <figure>
+  <svg viewBox="0 0 760 220" role="img" aria-label="Leaky bucket drains steadily; token bucket saves up tokens for bursts">
+    <g font-size="12" fill="#22303A">
+      <text x="190" y="24" text-anchor="middle" font-weight="bold" font-size="14">LEAKY BUCKET</text>
+      <path d="M 130 44 L 250 44 L 235 140 L 145 140 Z" fill="#EBF1FB" stroke="#2C5FB3" stroke-width="2"/>
+      <line class="flow" x1="190" y1="10" x2="190" y2="40" stroke="#2C5FB3" stroke-width="2" marker-end="url(#m1)"/>
+      <text x="255" y="30" font-size="10.5" fill="#2C5FB3">requests pour in (any speed)</text>
+      <line class="flow" x1="190" y1="142" x2="190" y2="175" stroke="#1B7A46" stroke-width="2" marker-end="url(#m1)"/>
+      <text x="205" y="168" font-size="10.5" fill="#1B7A46">drips out at ONE steady speed</text>
+      <text x="190" y="200" text-anchor="middle" font-size="11" fill="#5C6B75">too full? overflow = rejected</text>
+      <text x="570" y="24" text-anchor="middle" font-weight="bold" font-size="14">TOKEN BUCKET</text>
+      <path d="M 510 44 L 630 44 L 615 140 L 525 140 Z" fill="#FAF3E3" stroke="#9A6B15" stroke-width="2"/>
+      <g fill="#9A6B15"><circle cx="555" cy="120" r="8"/><circle cx="580" cy="122" r="8"/><circle cx="568" cy="103" r="8"/><circle cx="595" cy="108" r="8"/></g>
+      <line class="flow" x1="570" y1="10" x2="570" y2="40" stroke="#9A6B15" stroke-width="2" marker-end="url(#m1)"/>
+      <text x="635" y="30" font-size="10.5" fill="#9A6B15">coins drip IN slowly</text>
+      <text x="570" y="165" text-anchor="middle" font-size="10.5" fill="#22303A">each request spends one coin</text>
+      <text x="570" y="200" text-anchor="middle" font-size="11" fill="#5C6B75">saved coins = a quick burst is allowed</text>
+    </g>
+  </svg>
+  <figcaption>PICTURE 9 — Left: smooth the crowd. Right: give a fair allowance that can be saved up.</figcaption>
+  </figure>
+  <div class="eg"><span class="t">EXAMPLE 1 — LEAKY</span><p>A nightclub lets in one person every few seconds, no matter how big the crowd outside. The inside stays calm. Use this when the thing behind the door is fragile and hates crowds.</p></div>
+  <div class="eg"><span class="t">EXAMPLE 2 — TOKEN</span><p>Rollover phone minutes. Quiet all month? You saved minutes and can talk a long time today. Used them up? Wait for more. Use this for customer allowances — quiet customers deserve their burst.</p></div>
+  <div class="why"><span class="t">WHY TWO? ISN'T ONE BETTER?</span>
+  <p>They keep different promises. Protecting a fragile machine → smooth the flow → leaky. Being fair to a paying customer → allow saved-up bursts → token. Name the promise first. The right bucket follows.</p></div>
+
+  <h3>The hard part: counting across 200 servers</h3>
+  <p>Remember: there is no single server. The traffic officer spreads one visitor's requests across 200 machines. If each machine allows "100 per minute" on its own, the visitor really gets 200 × 100 = 20,000. The limit leaked.</p>
+  <figure>
+  <svg viewBox="0 0 760 210" role="img" aria-label="Shared tally is slow, local tallies with occasional sync is fast and close enough">
+    <g font-size="12" fill="#22303A">
+      <text x="190" y="22" text-anchor="middle" font-weight="bold" font-size="13">PLAN A: one shared tally</text>
+      <rect x="70" y="40" width="100" height="40" rx="7" fill="#fff" stroke="#22303A"/><text x="120" y="65" text-anchor="middle" font-size="11">server</text>
+      <rect x="220" y="40" width="100" height="40" rx="7" fill="#fff" stroke="#22303A"/><text x="270" y="65" text-anchor="middle" font-size="11">server</text>
+      <rect x="140" y="120" width="110" height="42" rx="7" fill="#FBEFEC" stroke="#B5493A"/><text x="195" y="146" text-anchor="middle" font-size="11" fill="#B5493A">shared tally</text>
+      <line class="flow" x1="120" y1="80" x2="180" y2="118" stroke="#B5493A" stroke-width="1.6"/>
+      <line class="flow" x1="270" y1="80" x2="215" y2="118" stroke="#B5493A" stroke-width="1.6"/>
+      <text x="195" y="192" text-anchor="middle" font-size="11" fill="#B5493A">every request waits for the trip = slow · one weak point</text>
+      <text x="570" y="22" text-anchor="middle" font-weight="bold" font-size="13">PLAN B: local tallies + compare notes ✓</text>
+      <rect x="450" y="40" width="100" height="40" rx="7" fill="#EAF5EE" stroke="#1B7A46"/><text x="500" y="65" text-anchor="middle" font-size="11">own tally</text>
+      <rect x="620" y="40" width="100" height="40" rx="7" fill="#EAF5EE" stroke="#1B7A46"/><text x="670" y="65" text-anchor="middle" font-size="11">own tally</text>
+      <rect x="530" y="120" width="120" height="42" rx="7" fill="#fff" stroke="#5C6B75" stroke-dasharray="4 3"/><text x="590" y="140" text-anchor="middle" font-size="11">compare notes</text><text x="590" y="155" text-anchor="middle" font-size="10" fill="#5C6B75">10× per second</text>
+      <line class="flow" x1="500" y1="80" x2="555" y2="118" stroke="#5C6B75" stroke-width="1.4"/>
+      <line class="flow" x1="670" y1="80" x2="625" y2="118" stroke="#5C6B75" stroke-width="1.4"/>
+      <text x="585" y="192" text-anchor="middle" font-size="11" fill="#1B7A46">answers instantly · slightly loose · no weak point</text>
+    </g>
+  </svg>
+  <figcaption>PICTURE 10 — Exact but slow, or instant and close enough. Real systems pick instant.</figcaption>
+  </figure>
+  <div class="why"><span class="t">WHY NOT THE SHARED TALLY? IT'S "CORRECT"!</span>
+  <p>Because every one of 200 servers would ask the tally computer — and wait for the reply — on <strong>every single request</strong>. Tiny wait × millions of requests = a huge slowdown. And if the tally computer breaks, everything stops. So real systems keep local tallies and compare notes many times a second. The count can be a little off for a moment. That is fine. This limit protects the system; it is not a bill. Roughly right, instantly, beats exactly right, slowly.</p></div>
+</section>
+<div class="divider"></div>
+
+<!-- ============ PART 8 ============ -->
+<section id="p8">
+  <span class="lvl">LEVEL 3 · PROTECTION</span><br>
+  <span class="chip">PART 8</span>
+  <h2>"Who are you?" — the self-proving ID card</h2>
+  <p>Before doing anything private — show your messages, charge your card — the system must know it's really you. Checking a big user list on every request would be slow (Part 7 taught you why: waiting on one shared thing is poison). The fix is an ID card that <strong>proves itself</strong>.</p>
+  <p>That card is called a <strong>JWT</strong> (JSON Web Token — say "jot"). Plain words: a small digital note that says who you are, <strong>signed</strong> by the login service with a seal nobody can fake but anyone can check.</p>
+  <figure>
+  <svg viewBox="0 0 760 180" role="img" aria-label="Login once, get a signed card, then every request shows the card and the seal is checked instantly">
+    <g font-size="12" fill="#22303A">
+      <rect x="30" y="30" width="140" height="52" rx="9" fill="#fff" stroke="#22303A" stroke-width="2"/><text x="100" y="53" text-anchor="middle" font-weight="bold">You</text><text x="100" y="71" text-anchor="middle" font-size="10.5" fill="#5C6B75">log in once</text>
+      <rect x="300" y="20" width="170" height="60" rx="9" fill="#EBF1FB" stroke="#2C5FB3" stroke-width="2"/><text x="385" y="45" text-anchor="middle" font-weight="bold" fill="#2C5FB3">Login service</text><text x="385" y="65" text-anchor="middle" font-size="10.5" fill="#2C5FB3">gives you a SIGNED card</text>
+      <rect x="580" y="110" width="160" height="55" rx="9" fill="#EAF5EE" stroke="#1B7A46" stroke-width="2"/><text x="660" y="133" text-anchor="middle" font-weight="bold" fill="#1B7A46">Any server</text><text x="660" y="152" text-anchor="middle" font-size="10.5" fill="#1B7A46">glances at the seal: real? go.</text>
+      <rect x="270" y="118" width="150" height="42" rx="8" fill="#FAF3E3" stroke="#9A6B15" stroke-width="2"/><text x="345" y="137" text-anchor="middle" font-size="11" fill="#9A6B15">🪪 card travels</text><text x="345" y="152" text-anchor="middle" font-size="10" fill="#9A6B15">with every request</text>
+      <line class="flow" x1="170" y1="50" x2="293" y2="50" stroke="#2C5FB3" stroke-width="2" marker-end="url(#m1)"/>
+      <line class="flow" x1="170" y1="70" x2="263" y2="132" stroke="#9A6B15" stroke-width="2" marker-end="url(#m1)"/>
+      <line class="flow" x1="420" y1="139" x2="573" y2="139" stroke="#1B7A46" stroke-width="2" marker-end="url(#m1)"/>
+    </g>
+  </svg>
+  <figcaption>PICTURE 11 — Log in once. Carry the card. Every door checks the seal in an instant — no phone call to head office.</figcaption>
+  </figure>
+  <div class="eg"><span class="t">EXAMPLE 1</span><p>A festival wristband with a hologram. Gate staff glance at the hologram — real? In you go. They never phone the ticket office. The proof travels on your wrist.</p></div>
+  <div class="eg"><span class="t">EXAMPLE 2</span><p>A parent's signed permission slip for a school trip. Any teacher recognizes the signature. Nobody calls the parent for each class.</p></div>
+  <div class="why"><span class="t">WHY A CARD INSTEAD OF LOOKING PEOPLE UP?</span>
+  <p>Look-ups wait on one shared list — slow, and a single weak point (Part 7's lesson again). The card removes the look-up. The honest cost: a card already out there cannot be un-signed. If it's stolen, it works until it expires. So cards are made to <strong>expire fast</strong> — in minutes — and there is a small "banned right now" list for emergencies. Fast for everyone; still stoppable when it matters. (Part 14 shows the modern way to cancel access instantly.)</p></div>
+  <div class="trap"><span class="t">COMMON MISTAKE</span>
+  <p>"Logged in" is not "trusted forever." A laptop can be stolen after login. Modern systems keep re-checking: short-lived cards, and instant cancel switches. Trust, but keep checking.</p></div>
+</section>
+<div class="divider"></div>
+
+<!-- ============ PART 9 ============ -->
+<section id="p9">
+  <span class="lvl">LEVEL 3 · PROTECTION</span><br>
+  <span class="chip">PART 9</span>
+  <h2>Bad traffic: reject it cheaply, in layers</h2>
+  <p>At a busy site, a big share of traffic is junk: robots scanning for weak spots, password-guessers, fake crowds. You cannot inspect everyone deeply — you would drown. The trick: <strong>line up your checks from cheapest to most expensive</strong>, and reject bad traffic as early as possible.</p>
+  <figure>
+  <svg viewBox="0 0 760 220" role="img" aria-label="A funnel of checks: cheap checks first remove most junk, expensive checks see only a few">
+    <g font-size="12" fill="#22303A">
+      <path d="M 80 30 L 680 30 L 600 80 L 160 80 Z" fill="#EAF5EE" stroke="#1B7A46" stroke-width="1.5"/>
+      <text x="380" y="60" text-anchor="middle" font-weight="bold" fill="#1B7A46">Check 1 · almost free · sees EVERYONE</text>
+      <path d="M 160 90 L 600 90 L 530 140 L 230 140 Z" fill="#FAF3E3" stroke="#9A6B15" stroke-width="1.5"/>
+      <text x="380" y="120" text-anchor="middle" font-weight="bold" fill="#9A6B15">Check 2 · cheap · sees fewer</text>
+      <path d="M 230 150 L 530 150 L 460 200 L 300 200 Z" fill="#FBEFEC" stroke="#B5493A" stroke-width="1.5"/>
+      <text x="380" y="180" text-anchor="middle" font-weight="bold" fill="#B5493A">Check 3 · expensive · sees very few</text>
+      <text x="710" y="60" font-size="11" fill="#1B7A46">junk</text>
+      <text x="710" y="75" font-size="11" fill="#1B7A46">out →</text>
+      <text x="640" y="120" font-size="11" fill="#9A6B15">junk out →</text>
+      <text x="570" y="180" font-size="11" fill="#B5493A">junk out →</text>
+    </g>
+  </svg>
+  <figcaption>PICTURE 12 — A funnel. Each layer throws junk out, so the pricey layer at the bottom stays calm.</figcaption>
+  </figure>
+  <div class="eg"><span class="t">EXAMPLE</span><p>Airport security. Quick boarding-pass glance (cheap, everyone) → metal detector (medium, everyone but fast) → full bag search (expensive, only the flagged few). Nobody searches every bag by hand. The line would never move.</p></div>
+  <div class="plain"><span class="t">HOW TO SPOT THE FAKERS</span>
+  <p><strong>Watch behavior, not claims.</strong> Real people are messy: they pause, scroll, think. Robots are metronomes: perfectly even timing, hammering one door, poking pages that don't exist.</p>
+  <p><strong>Check the deep fingerprint, not the name tag.</strong> A request can <em>claim</em> to be a normal phone browser. But the technical way it opens its connection gives away what it really is. Faking the name tag is free. Faking the deep fingerprint is expensive. Trust the expensive-to-fake signal.</p></div>
+  <div class="why"><span class="t">WHY NOT INSTANTLY BAN EVERY SUSPICIOUS ADDRESS?</span>
+  <p>Three reasons. <strong>1.</strong> Thousands of innocent people often share one address (a whole college, a whole phone network). Ban it, and you lock out a campus. <strong>2.</strong> A hard block tells the attacker exactly when you spotted them — so they adjust and return. A quiet slowdown wastes their time and teaches them nothing. <strong>3.</strong> "Suspicious but slowed" cases give you data to learn from. So escalate gently: full speed → slowdown → puzzle → block. The ban hammer is the last step, not the first.</p></div>
+</section>
+<div class="divider"></div>
+
+<!-- ============ PART 10 ============ -->
+<section id="p10">
+  <span class="lvl">LEVEL 3 · PROTECTION</span><br>
+  <span class="chip">PART 10</span>
+  <h2>The Bloom filter: a tiny memory that says "definitely not"</h2>
+  <p>Now the star of the cheap-checks funnel. Suppose you have a blocklist of <strong>10 million known-bad addresses</strong>. Every visitor must be checked against it, millions of times a second. Storing and searching 10 million entries is heavy. The <strong>Bloom filter</strong> is a tiny tool that answers one question extremely fast:</p>
+  <div class="plain"><span class="t">THE ONLY TWO ANSWERS IT EVER GIVES</span>
+  <p>→ <strong>"Definitely NOT on the list."</strong> Trust this 100%. Let them through, zero delay.<br>
+  → <strong>"MIGHT be on the list."</strong> Usually true, sometimes a false alarm. For these few, do one proper check to be sure.</p>
+  <p>It never makes the dangerous mistake (missing someone who IS on the list). It only makes the harmless one (a rare false alarm, caught by the follow-up check).</p></div>
+  <figure>
+  <svg viewBox="0 0 760 240" role="img" aria-label="Bloom filter as a strip of light switches; a name flips a few switches; checking a name looks at its switches">
+    <g font-size="12" fill="#22303A">
+      <text x="30" y="26" font-weight="bold">Adding a bad address flips a few switches ON:</text>
+      <g font-size="11">
+        <rect x="30" y="40" width="44" height="34" rx="4" fill="#fff" stroke="#5C6B75"/><text x="52" y="62" text-anchor="middle">off</text>
+        <rect x="80" y="40" width="44" height="34" rx="4" fill="#B5493A"/><text x="102" y="62" text-anchor="middle" fill="#fff">ON</text>
+        <rect x="130" y="40" width="44" height="34" rx="4" fill="#fff" stroke="#5C6B75"/><text x="152" y="62" text-anchor="middle">off</text>
+        <rect x="180" y="40" width="44" height="34" rx="4" fill="#fff" stroke="#5C6B75"/><text x="202" y="62" text-anchor="middle">off</text>
+        <rect x="230" y="40" width="44" height="34" rx="4" fill="#B5493A"/><text x="252" y="62" text-anchor="middle" fill="#fff">ON</text>
+        <rect x="280" y="40" width="44" height="34" rx="4" fill="#fff" stroke="#5C6B75"/><text x="302" y="62" text-anchor="middle">off</text>
+        <rect x="330" y="40" width="44" height="34" rx="4" fill="#fff" stroke="#5C6B75"/><text x="352" y="62" text-anchor="middle">off</text>
+        <rect x="380" y="40" width="44" height="34" rx="4" fill="#B5493A"/><text x="402" y="62" text-anchor="middle" fill="#fff">ON</text>
+        <rect x="430" y="40" width="44" height="34" rx="4" fill="#fff" stroke="#5C6B75"/><text x="452" y="62" text-anchor="middle">off</text>
+      </g>
+      <text x="490" y="62" font-size="11" fill="#5C6B75">…millions of switches, but each entry uses only a few</text>
+      <text x="30" y="120" font-weight="bold">Checking a visitor = look ONLY at their few switches:</text>
+      <text x="40" y="150" font-size="12">Visitor A → switches 3, 7, 9 → one of them is <tspan font-weight="bold">off</tspan> → </text>
+      <text x="470" y="150" font-size="12" fill="#1B7A46" font-weight="bold">DEFINITELY NOT banned. Go.</text>
+      <text x="40" y="185" font-size="12">Visitor B → switches 2, 5, 8 → <tspan font-weight="bold">all ON</tspan> → </text>
+      <text x="420" y="185" font-size="12" fill="#9A6B15" font-weight="bold">MIGHT be banned → one real check.</text>
+      <text x="40" y="220" font-size="11" fill="#5C6B75">Why "might"? Other bad entries may have flipped those same switches by chance. Rare, and harmless.</text>
+    </g>
+  </svg>
+  <figcaption>PICTURE 13 — A strip of switches. One "off" switch is absolute proof of innocence. All "on" means: check properly, just in case.</figcaption>
+  </figure>
+  <div class="eg"><span class="t">EXAMPLE</span><p>A club bouncer who cannot carry 10,000 photos of banned people. Instead they memorize rough features. You arrive. Match none of the features? You are <strong>definitely</strong> not banned — walk in, no delay. Match the features? You <em>might</em> be banned, or you might just look similar — quick ID check for you only. Innocent people breeze through. No banned person slips past. That is the Bloom filter.</p></div>
+  <div class="plain"><span class="t">THE PAYOFF, IN NUMBERS</span>
+  <p>Checking against 10 million bad addresses this way needs about <strong>12 megabytes</strong> of memory — smaller than one photo. The full list would need roughly <strong>a thousand megabytes</strong>. About 80 times smaller, and each check takes a few instant peeks instead of a search. That is why every serious gateway carries one.</p></div>
+  <div class="why"><span class="t">WHY ACCEPT FALSE ALARMS AT ALL?</span>
+  <p>Because of which direction the mistake goes. A false alarm costs one innocent person one extra check — tiny, and they still get in. The opposite mistake — letting a banned person through — never happens. When a tool must sometimes be wrong, choose the harmless direction. This tool guarantees it.</p></div>
+</section>
+<div class="divider"></div>
+
+<!-- ============ PART 11 ============ -->
+<section id="p11">
+  <span class="lvl">LEVEL 4 · RUNNING THE FLEET</span><br>
+  <span class="chip">PART 11</span>
+  <h2>Kubernetes: the tireless manager of hundreds of servers</h2>
+  <p>Hundreds of servers run hundreds of copies of your apps. Copies crash. Machines die. Traffic doubles at lunch. Managing this by hand is impossible. <strong>Kubernetes</strong> (short: <strong>K8s</strong> — the 8 stands for the eight middle letters) is the software that manages it all, automatically.</p>
+
+  <h3>The one idea behind everything it does</h3>
+  <div class="plain"><span class="t">KUBERNETES IN ONE SENTENCE</span>
+  <p>You tell it the <strong>result</strong> you want ("keep 3 copies of my app running"). It compares your wish with reality, over and over, forever — and fixes any gap it finds.</p></div>
+  <figure>
+  <svg viewBox="0 0 760 190" role="img" aria-label="A loop: want 3 copies, see 2 copies, start one more, check again">
+    <g font-size="13" fill="#22303A">
+      <rect x="60" y="60" width="170" height="60" rx="10" fill="#EBF1FB" stroke="#2C5FB3" stroke-width="2"/>
+      <text x="145" y="86" text-anchor="middle" font-weight="bold" fill="#2C5FB3">Your wish</text>
+      <text x="145" y="106" text-anchor="middle" font-size="11.5" fill="#2C5FB3">"3 copies running"</text>
+      <rect x="300" y="60" width="170" height="60" rx="10" fill="#fff" stroke="#22303A" stroke-width="2"/>
+      <text x="385" y="86" text-anchor="middle" font-weight="bold">Reality</text>
+      <text x="385" y="106" text-anchor="middle" font-size="11.5" fill="#B5493A">only 2 (one crashed)</text>
+      <rect x="540" y="60" width="170" height="60" rx="10" fill="#EAF5EE" stroke="#1B7A46" stroke-width="2"/>
+      <text x="625" y="86" text-anchor="middle" font-weight="bold" fill="#1B7A46">Action</text>
+      <text x="625" y="106" text-anchor="middle" font-size="11.5" fill="#1B7A46">start 1 more copy</text>
+      <line class="flow" x1="230" y1="90" x2="293" y2="90" stroke="#22303A" stroke-width="2" marker-end="url(#m1)"/>
+      <text x="262" y="80" text-anchor="middle" font-size="10.5">compare</text>
+      <line class="flow" x1="470" y1="90" x2="533" y2="90" stroke="#1B7A46" stroke-width="2" marker-end="url(#m1)"/>
+      <text x="502" y="80" text-anchor="middle" font-size="10.5">gap!</text>
+      <path class="flow" d="M 625 120 C 625 165 145 165 145 122" fill="none" stroke="#5C6B75" stroke-width="2" marker-end="url(#m1)"/>
+      <text x="385" y="178" text-anchor="middle" font-size="11" fill="#5C6B75">…then check again, forever</text>
+    </g>
+  </svg>
+  <figcaption>PICTURE 14 — Wish, reality, fix, repeat. That loop IS Kubernetes.</figcaption>
+  </figure>
+  <div class="eg"><span class="t">EXAMPLE 1</span><p>A thermostat. You set 21°C. It compares wish (21) with reality (19) and turns on the heat. Reaches 21? It rests — but keeps watching. You never command the furnace. You state the result. Kubernetes is a thermostat for software.</p></div>
+  <div class="eg"><span class="t">EXAMPLE 2</span><p>A fish-tank auto-topper keeps water at the marked line. Water evaporates; it adds more. It never needs instructions — just the target line and constant checking.</p></div>
+  <div class="why"><span class="t">WHY STATE THE RESULT, INSTEAD OF GIVING ORDERS?</span>
+  <p>In a huge system, things break constantly and messages get lost. One-time orders ("start a copy on machine 47!") fail silently — a lost order stays lost. A wish that is re-checked forever heals itself: whatever went wrong, the next check spots the gap and fixes it. "I told you once" loses. "I keep making sure" wins.</p></div>
+
+  <h3>Four words you will hear</h3>
+  <table>
+    <tr><th>Word</th><th>Plain meaning</th></tr>
+    <tr><td><strong>Pod</strong></td><td>One running copy of an app, in its own bubble. The smallest unit Kubernetes manages.</td></tr>
+    <tr><td><strong>Node</strong></td><td>One real computer in the fleet. A node runs many pods.</td></tr>
+    <tr><td><strong>Service</strong></td><td>A steady name for an app. Pods come and go; the name always points to whichever pods are alive right now.</td></tr>
+    <tr><td><strong>Controller</strong></td><td>One thermostat-loop. There are many: one keeps copy-counts right, one watches machines, and so on.</td></tr>
+  </table>
+  <figure>
+  <svg viewBox="0 0 760 170" role="img" aria-label="Two nodes each running pods, a service name pointing to the alive pods">
+    <g font-size="12" fill="#22303A">
+      <rect x="40" y="60" width="310" height="95" rx="10" fill="#fff" stroke="#22303A" stroke-width="2"/>
+      <text x="195" y="82" text-anchor="middle" font-weight="bold">Node (a real computer)</text>
+      <rect x="65" y="95" width="120" height="44" rx="8" fill="#EAF5EE" stroke="#1B7A46"/><text x="125" y="122" text-anchor="middle" font-size="11">pod: shop app</text>
+      <rect x="205" y="95" width="120" height="44" rx="8" fill="#EAF5EE" stroke="#1B7A46"/><text x="265" y="122" text-anchor="middle" font-size="11">pod: pay app</text>
+      <rect x="410" y="60" width="310" height="95" rx="10" fill="#fff" stroke="#22303A" stroke-width="2"/>
+      <text x="565" y="82" text-anchor="middle" font-weight="bold">Node (another computer)</text>
+      <rect x="435" y="95" width="120" height="44" rx="8" fill="#EAF5EE" stroke="#1B7A46"/><text x="495" y="122" text-anchor="middle" font-size="11">pod: shop app</text>
+      <rect x="575" y="95" width="120" height="44" rx="8" fill="#EAF5EE" stroke="#1B7A46"/><text x="635" y="122" text-anchor="middle" font-size="11">pod: pay app</text>
+      <rect x="280" y="8" width="200" height="36" rx="18" fill="#EBF1FB" stroke="#2C5FB3" stroke-width="2"/>
+      <text x="380" y="31" text-anchor="middle" font-size="12" fill="#2C5FB3" font-weight="bold">Service name: "pay"</text>
+      <line class="flow" x1="330" y1="44" x2="272" y2="92" stroke="#2C5FB3" stroke-width="1.8" marker-end="url(#m1)"/>
+      <line class="flow" x1="430" y1="44" x2="628" y2="92" stroke="#2C5FB3" stroke-width="1.8" marker-end="url(#m1)"/>
+    </g>
+  </svg>
+  <figcaption>PICTURE 15 — The name "pay" always finds the live pay-pods, wherever they are today.</figcaption>
+  </figure>
+  <div class="trap"><span class="t">A REAL GOTCHA</span>
+  <p>The Service picks a pod <strong>once per connection</strong>, then sticks with it. Fine for normal web traffic. But some apps open ONE long connection and pour thousands of requests down it — then one pod gets everything and the rest sit idle. It looks broken. It isn't — it's per-connection choosing. The fix is a smarter helper that chooses per-request. That helper is next.</p></div>
+</section>
+<div class="divider"></div>
+
+<!-- ============ PART 12 ============ -->
+<section id="p12">
+  <span class="lvl">LEVEL 4 · RUNNING THE FLEET</span><br>
+  <span class="chip">PART 12</span>
+  <h2>The sidecar: a networking helper riding along</h2>
+  <p>Every app needs the same networking chores: lock its connections, retry when something briefly fails, keep counts, follow rules. You could build all that into every app. But apps are written in many languages by many teams. Building the same thing many times, and begging everyone to update it, is painful.</p>
+  <p>Better idea: put a small, standard helper <strong>right next to each app</strong>, in the same bubble (pod). All the app's traffic goes through the helper first. The helper does the chores. The app doesn't even know. This helper is the <strong>sidecar</strong>. The most popular one is called <strong>Envoy</strong>.</p>
+  <figure>
+  <svg viewBox="0 0 760 180" role="img" aria-label="Each pod holds an app plus a sidecar helper; all traffic passes through the helper">
+    <g font-size="12" fill="#22303A">
+      <rect x="60" y="40" width="280" height="110" rx="12" fill="none" stroke="#2C5FB3" stroke-width="2" stroke-dasharray="6 4"/>
+      <text x="200" y="32" text-anchor="middle" font-size="11" fill="#2C5FB3">one pod (bubble)</text>
+      <rect x="85" y="70" width="105" height="55" rx="8" fill="#fff" stroke="#22303A" stroke-width="2"/><text x="137" y="94" text-anchor="middle" font-weight="bold">App</text><text x="137" y="112" text-anchor="middle" font-size="10.5" fill="#5C6B75">just works</text>
+      <rect x="210" y="70" width="105" height="55" rx="8" fill="#EAF5EE" stroke="#1B7A46" stroke-width="2"/><text x="262" y="90" text-anchor="middle" font-weight="bold" fill="#1B7A46">Sidecar</text><text x="262" y="108" text-anchor="middle" font-size="10" fill="#1B7A46">does chores</text>
+      <line class="flow" x1="190" y1="97" x2="208" y2="97" stroke="#1B7A46" stroke-width="2"/>
+      <line class="flow" x1="315" y1="97" x2="410" y2="97" stroke="#1B7A46" stroke-width="2" marker-end="url(#m1)"/>
+      <text x="470" y="100" font-size="11" fill="#1B7A46">to the outside world</text>
+      <text x="200" y="170" text-anchor="middle" font-size="11" fill="#5C6B75">every app gets its own identical helper</text>
+    </g>
+  </svg>
+  <figcaption>PICTURE 16 — The app drives. The sidecar handles maps, tolls, and paperwork.</figcaption>
+  </figure>
+  <div class="eg"><span class="t">EXAMPLE 1</span><p>A motorcycle sidecar — the little attached seat. The rider just rides. The passenger handles the map, tolls, and phone calls. Give every motorcycle the same expert passenger, and the whole city's paperwork is handled the same way — with no rider retrained.</p></div>
+  <div class="eg"><span class="t">EXAMPLE 2</span><p>A personal interpreter who shadows you at a conference. You speak normally; they handle translation and etiquette in every chat. You don't learn twelve languages — you bring the interpreter everywhere.</p></div>
+  <div class="why"><span class="t">WHY A SEPARATE HELPER, NOT BUILD IT INTO EACH APP?</span>
+  <p>It turns "twelve teams each writing security their own way, and hoping they got it right" into "one well-tested helper, set up centrally, working the same for everyone." Improve encryption everywhere? Update the helper, not twelve apps on twelve schedules. Like stationing one trained medic beside each worker instead of hoping every worker remembers first aid.</p></div>
+
+  <h3>Nginx or Envoy? And why both exist</h3>
+  <p>They are cousins doing similar work. They shine in different spots:</p>
+  <ul>
+    <li><strong>Nginx</strong> — the calm veteran at the <strong>front door</strong>, where the public internet comes in. Mature, trusted, great at serving files.</li>
+    <li><strong>Envoy</strong> — built for the <strong>busy inside</strong>, where pods appear and vanish every few seconds. Its special skill: taking new instructions <strong>live</strong>, without restarting, thousands of times an hour. That is exactly what a busy Kubernetes cluster needs.</li>
+  </ul>
+  <div class="eg"><span class="t">EXAMPLE</span><p>Nginx is the steady doorman at the main entrance. Envoy is the nimble courier inside, rerouting all day as people change desks. Same job (get things to the right place), different rooms. Many companies use both.</p></div>
+</section>
+<div class="divider"></div>
+
+<!-- ============ PART 13 ============ -->
+<section id="p13">
+  <span class="lvl">LEVEL 4 · RUNNING THE FLEET</span><br>
+  <span class="chip">PART 13</span>
+  <h2>mTLS: both sides show ID</h2>
+  <p>Start with normal secure browsing, then add one twist.</p>
+  <p><strong>Normal secure browsing (one-sided).</strong> The padlock in your browser is <strong>TLS</strong> (Transport Layer Security). It does two jobs: it scrambles the chat so nobody in the middle can read it, and it lets the <strong>website prove it is really itself</strong>. But only the website proves itself. You stay anonymous. Like a shop showing its licence while you say nothing.</p>
+  <p>The website proves itself with a <strong>certificate</strong> — a digital passport, stamped by a trusted <strong>CA</strong> (Certificate Authority, a trusted passport office). Your browser trusts a few passport offices, so it trusts their stamps.</p>
+  <p><strong>The twist: make it two-sided.</strong> <strong>mTLS</strong> (mutual TLS) adds the missing half: <strong>both</strong> sides show their passport. Website proves itself to the visitor, AND the visitor proves itself to the website. Both are sure.</p>
+  <figure>
+  <svg viewBox="0 0 760 170" role="img" aria-label="One-sided TLS: only server shows ID. mTLS: both show ID">
+    <g font-size="12" fill="#22303A">
+      <text x="190" y="24" text-anchor="middle" font-weight="bold" font-size="13">NORMAL TLS</text>
+      <circle cx="90" cy="80" r="22" fill="#fff" stroke="#22303A" stroke-width="2"/><text x="90" y="84" text-anchor="middle" font-size="11">you</text>
+      <circle cx="290" cy="80" r="22" fill="#EAF5EE" stroke="#1B7A46" stroke-width="2"/><text x="290" y="84" text-anchor="middle" font-size="11" fill="#1B7A46">site</text>
+      <line class="flow" x1="268" y1="70" x2="112" y2="70" stroke="#1B7A46" stroke-width="2" marker-end="url(#m1)"/>
+      <text x="190" y="60" text-anchor="middle" font-size="10.5" fill="#1B7A46">site shows passport</text>
+      <text x="190" y="112" text-anchor="middle" font-size="10.5" fill="#5C6B75">you show nothing</text>
+      <text x="570" y="24" text-anchor="middle" font-weight="bold" font-size="13">mTLS (mutual)</text>
+      <circle cx="470" cy="80" r="22" fill="#EBF1FB" stroke="#2C5FB3" stroke-width="2"/><text x="470" y="84" text-anchor="middle" font-size="11" fill="#2C5FB3">app A</text>
+      <circle cx="670" cy="80" r="22" fill="#EAF5EE" stroke="#1B7A46" stroke-width="2"/><text x="670" y="84" text-anchor="middle" font-size="11" fill="#1B7A46">app B</text>
+      <line class="flow" x1="492" y1="68" x2="648" y2="68" stroke="#2C5FB3" stroke-width="2" marker-end="url(#m1)"/>
+      <line class="flow" x1="648" y1="92" x2="492" y2="92" stroke="#1B7A46" stroke-width="2" marker-end="url(#m1)"/>
+      <text x="570" y="130" text-anchor="middle" font-size="10.5" fill="#22303A">both show passports</text>
+    </g>
+  </svg>
+  <figcaption>PICTURE 17 — Left: only the site proves itself. Right: both sides do. That's the whole difference.</figcaption>
+  </figure>
+  <div class="eg"><span class="t">EXAMPLE</span><p>A courier at your door. Normal TLS: they show a company badge, you open up — but they never check you. mTLS: you both show ID. They confirm they're delivering to the right person; you confirm they're the real courier. Two passports, mutual certainty. Perfect for programs handing each other sensitive data inside a data center.</p></div>
+  <div class="why"><span class="t">WHY MACHINES USE THIS, BUT PEOPLE USUALLY DON'T</span>
+  <p>Managing passports (getting, renewing, canceling stolen ones) is fiddly — too much to ask of people across all their devices. So people get passwords and phone codes. But <strong>programs</strong> are the opposite: they are bad at hiding a password (it sits in a file a thief can grab), yet the system can automatically issue and refresh passports for them behind the scenes. Match the ID method to who can manage it. Machines → passports (mTLS). People → passwords + codes.</p></div>
+  <div class="plain"><span class="t">TWO DETAILS THAT MAKE IT SAFE</span>
+  <p><strong>Identity by name, not address.</strong> Pods die and their addresses get reused fast — today's "pay" address is tomorrow's "cart" address. So rules are written against the <strong>passport's name</strong> ("the pay service"), never the address. Recognize the person, not "whoever sits in seat 14 today."</p>
+  <p><strong>Passports that expire in a day and self-renew.</strong> Each program gets a passport lasting about a day, renewed quietly. To cut a program off, just stop renewing — within a day its passport is dead. Short life turns "cancel a stolen pass" (hard) into "stop reissuing" (easy).</p></div>
+  <div class="trap"><span class="t">COMMON MISTAKE</span>
+  <p>Showing a passport proves nothing by itself — passports aren't secret. The real proof is a secret math signature that <strong>only the true owner can make</strong>, tied to this exact conversation so it can't be copied later. Not just showing the passport — also signing a fresh note in front of the officer, in handwriting only you have.</p></div>
+</section>
+<div class="divider"></div>
+
+<!-- ============ PART 14 ============ -->
+<section id="p14">
+  <span class="lvl">LEVEL 5 · THE NEW FRONTIER</span><br>
+  <span class="chip">PART 14</span>
+  <h2>The AI gateway: watching traffic built to be unwatchable</h2>
+  <p>This is the newest part, and the most important for modern work. The direction flips. Before, we worried about strangers coming <strong>in</strong>. Now we worry about our own staff and their AI tools reaching <strong>out</strong> — and we must make sure nothing secret leaks out, and nothing harmful comes back.</p>
+
+  <h3>The catch: the traffic is locked</h3>
+  <p>Secure connections are scrambled so no one in the middle can read them — that's the padlock's whole job (Part 5). But a company that must stop leaks needs to look inside its own work traffic. How do you look inside something built to be unreadable?</p>
+  <p>Answer: a <strong>gateway</strong> in the middle, <strong>with permission</strong>. It unlocks the message, checks it, and re-locks it before sending on. This only works because the company installed its own trusted passport office onto its own work laptops in advance — using <strong>MDM</strong> (Mobile Device Management, the software IT puts on work devices). On a personal device without that setup, the trick correctly fails and the browser warns you. As it should.</p>
+  <figure>
+  <svg viewBox="0 0 760 150" role="img" aria-label="Employee to gateway to internet: gateway unlocks, checks, relocks">
+    <g font-size="12" fill="#22303A">
+      <rect x="20" y="55" width="130" height="50" rx="9" fill="#fff" stroke="#22303A" stroke-width="2"/><text x="85" y="78" text-anchor="middle" font-weight="bold">Employee</text><text x="85" y="95" text-anchor="middle" font-size="10" fill="#5C6B75">on a work laptop</text>
+      <rect x="280" y="42" width="200" height="76" rx="10" fill="#FAF3E3" stroke="#9A6B15" stroke-width="2"/><text x="380" y="66" text-anchor="middle" font-weight="bold" fill="#9A6B15">Gateway (allowed)</text><text x="380" y="85" text-anchor="middle" font-size="10.5" fill="#9A6B15">unlock → check → re-lock</text><text x="380" y="102" text-anchor="middle" font-size="10" fill="#9A6B15">stops leaks, blocks bad stuff</text>
+      <rect x="610" y="55" width="130" height="50" rx="9" fill="#EAF5EE" stroke="#1B7A46" stroke-width="2"/><text x="675" y="78" text-anchor="middle" font-weight="bold" fill="#1B7A46">Internet</text><text x="675" y="95" text-anchor="middle" font-size="10" fill="#1B7A46">AI tools, websites</text>
+      <line class="flow" x1="150" y1="80" x2="273" y2="80" stroke="#9A6B15" stroke-width="2" marker-end="url(#m1)"/>
+      <line class="flow" x1="480" y1="80" x2="603" y2="80" stroke="#1B7A46" stroke-width="2" marker-end="url(#m1)"/>
+    </g>
+  </svg>
+  <figcaption>PICTURE 18 — The gateway is a company mailroom: it may open work mail on company grounds, check it, and reseal it.</figcaption>
+  </figure>
+  <div class="eg"><span class="t">EXAMPLE</span><p>A company mailroom that (by a policy everyone agreed to) opens outgoing work packages, checks nothing confidential is leaving, reseals them, and sends them on. It may do this only for company mail on company premises — never your personal letters from home.</p></div>
+
+  <h3>Checking the contents: cheap scan, then smart scan</h3>
+  <p>Once the gateway can read the content, it uses the funnel idea from Part 9, in two stages:</p>
+  <ul>
+    <li><strong>Stage 1 — fast pattern scan.</strong> A lightning-fast method reads the text once and checks it against thousands of known bad patterns at the same time (leaked passwords, card-number shapes, banned phrases). Runs on <strong>everything</strong>.</li>
+    <li><strong>Stage 2 — smart scan.</strong> To catch clever or reworded problems, a slower <strong>ML</strong> (Machine Learning — software that learns meaning from examples) takes a closer look. Because it's expensive, it only checks the small slice that Stage 1 flagged.</li>
+  </ul>
+  <div class="eg"><span class="t">EXAMPLE</span><p>Customs: a quick X-ray on every bag (fast, automatic), then a human expert who hand-inspects only the few bags the X-ray flagged. You'd never hand-open every bag — the line would never move.</p></div>
+
+  <h3>The new twist: the "user" is often a robot</h3>
+  <p>AI "agents" — programs that do many steps for you automatically — behave unlike humans. A person clicks a few times a minute and pauses. An agent can fire hundreds of requests in a burst and run all night. So the gateway must treat agents differently — for example, giving each agent its own narrow, short permission instead of the human's full powers.</p>
+  <div class="why"><span class="t">WHY NOT LET THE AGENT USE THE PERSON'S FULL LOGIN?</span>
+  <p>An AI agent can be tricked by sneaky instructions hidden in the content it reads. If it's carrying a human's <strong>full</strong> powers when that happens, the damage is huge — and the records can't tell if the human or the runaway agent did it. So the agent gets a narrow pass: "you may read email, for ten minutes, for this person, nothing else." If it goes wrong, the damage is small by design. A one-door, one-hour key beats handing over the master key.</p></div>
+
+  <h3>Cancel access the instant things change (CAE)</h3>
+  <p>Normally a pass works until it expires (Part 8). But sometimes you must cut access <strong>right now</strong> — a laptop is stolen, or someone just left the company. <strong>CAE</strong> (Continuous Access Evaluation) pushes an immediate "cut this person off, now" signal to everything, instead of waiting for the pass to run out.</p>
+  <div class="eg"><span class="t">EXAMPLE</span><p>Hotel key cards. Normally your card works until checkout. But report it stolen, and the front desk deactivates it instantly at every door. CAE is that instant, building-wide shut-off for digital access.</p></div>
+  <div class="plain"><span class="t">THE ONE PATTERN BEHIND THIS WHOLE STUDY</span>
+  <p>Notice the same shape keeps returning: <strong>a cheap, fast action for the normal case; an expensive, careful action held back for when something signals it's needed.</strong> Fast scan then smart scan. Bloom's instant "definitely fine," real check only for "maybe." Local tallies, occasional sync. Passes that expire, plus an instant cancel. See this once, and the whole field becomes one idea repeated — not a hundred separate tricks.</p></div>
+</section>
+<div class="divider"></div>
+
+<!-- ============ PART 15 ============ -->
+<section id="p15">
+  <span class="lvl">RECAP</span><br>
+  <span class="chip">PART 15</span>
+  <h2>The whole journey in fifteen lines</h2>
+  <p>Read slowly. If a line is unclear, that's the part to revisit.</p>
+  <ol>
+    <li>A server is just a computer that answers questions. A website is hundreds of them. <em>(Part 1)</em></li>
+    <li>The <strong>phone book (DNS)</strong> turns a name into a number. <em>(Part 2)</em></li>
+    <li>The <strong>nearest-building trick (Anycast)</strong> sends you to the closest one, and splits up attacks. <em>(Part 2)</em></li>
+    <li>A <strong>traffic officer (load balancer)</strong> hands your message to one of many servers. <em>(Part 3)</em></li>
+    <li><strong>Nginx</strong> serves thousands at once by never standing idle. <em>(Part 4)</em></li>
+    <li>It stays fast mostly by <strong>reusing connections</strong>, not redoing the handshake. <em>(Part 5)</em></li>
+    <li>You judge speed by the <strong>unlucky user (p99)</strong>, never the average. <em>(Part 6)</em></li>
+    <li><strong>Rate limits</strong> cap floods; counted locally with occasional syncing, not one slow shared tally. <em>(Part 7)</em></li>
+    <li>A <strong>self-proving ID card (JWT)</strong> checks who you are with no slow look-up. <em>(Part 8)</em></li>
+    <li>Bad traffic is thrown out in a <strong>cheap-to-expensive funnel</strong>. <em>(Part 9)</em></li>
+    <li>The <strong>Bloom filter</strong> gives instant "definitely fine / maybe bad" — only "maybe" pays for a real check. <em>(Part 10)</em></li>
+    <li><strong>Kubernetes</strong> keeps reality matching your wish, forever, like a thermostat. <em>(Part 11)</em></li>
+    <li>A <strong>sidecar (Envoy)</strong> does each app's networking chores, the same way for everyone. <em>(Part 12)</em></li>
+    <li>Programs prove themselves to each other with two-sided passports, <strong>mTLS</strong>. <em>(Part 13)</em></li>
+    <li>An <strong>AI gateway</strong> inspects outgoing traffic (cheap scan then smart scan), handles robot-agents carefully, and can cancel access instantly with <strong>CAE</strong>. <em>(Part 14)</em></li>
+  </ol>
+  <div class="plain"><span class="t">IF YOU KEEP ONLY THREE THINGS</span>
+  <p><strong>1. Never pay to wait.</strong> Nginx's whole genius. Half the tricks here are "avoid needless waiting or needless work."</p>
+  <p><strong>2. Cheap first, expensive only when signaled.</strong> Bloom filters, two-stage scanning, the security funnel, local-then-synced counting — all the same idea.</p>
+  <p><strong>3. There is no single "server."</strong> There is a self-healing fleet of hundreds, with layers of cleverness making it feel like one fast, reliable place.</p></div>
+  <p style="margin-top:18px;color:var(--soft)">That's the whole system. Not a hundred unrelated technologies — one sensible answer to a few hard facts: the internet is big, computers fail, strangers are hostile, and waiting is expensive. Every tool here answers one of those facts. Now open the full field manual — the hard words will have a simple picture behind them.</p>
+</section>
+
+</main>
+<footer>
+  <div class="wrap">Simple Illustrated Edition · read this first, then the field manual · short words, one idea at a time, a picture for every part.</div>
+</footer>
+</body>
+</html>
