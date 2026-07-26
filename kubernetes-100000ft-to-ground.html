@@ -1,0 +1,1695 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Kubernetes: 100,000 ft → Ground Level</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0D1420; --panel:#141E2F; --panel2:#0F1826; --line:#233247;
+  --ink:#E8EEF7; --dim:#93A5BC; --faint:#5B6B82;
+  --cyan:#4FD8EB; --amber:#FFB454; --green:#58D68D; --red:#FF6B6B; --violet:#A78BFA; --blue:#5EA1F7;
+  --mono:'IBM Plex Mono',ui-monospace,Menlo,monospace;
+  --disp:'Space Grotesk',system-ui,sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{background:var(--bg);color:var(--ink);font-family:var(--disp);line-height:1.65;font-size:16.5px;overflow-x:hidden}
+::selection{background:rgba(79,216,235,.25)}
+
+/* ---------- Altitude rail (signature) ---------- */
+#rail{position:fixed;left:0;top:0;bottom:0;width:86px;border-right:1px solid var(--line);background:linear-gradient(180deg,#0D1420,#0B111B);z-index:50;display:flex;flex-direction:column;align-items:center;padding:14px 0}
+#rail .plane{font-size:18px;transition:top .2s linear;position:absolute;left:50%;transform:translateX(-50%);z-index:2}
+#railtrack{position:relative;flex:1;width:2px;background:var(--line);margin:10px 0}
+#railfill{position:absolute;top:0;left:0;width:2px;background:linear-gradient(180deg,var(--cyan),var(--amber));height:0%}
+#alt-readout{font-family:var(--mono);font-size:11px;color:var(--cyan);text-align:center;line-height:1.3;white-space:nowrap}
+#alt-readout b{display:block;font-size:14px}
+.railmark{position:absolute;left:-4px;width:10px;height:10px;border-radius:50%;background:var(--panel);border:2px solid var(--faint);cursor:pointer}
+.railmark.active{border-color:var(--cyan);background:var(--cyan)}
+.railmark:hover::after{content:attr(data-label);position:absolute;left:16px;top:-4px;background:var(--panel);border:1px solid var(--line);padding:3px 8px;border-radius:6px;font-family:var(--mono);font-size:11px;color:var(--ink);white-space:nowrap}
+main{margin-left:86px;max-width:1060px;padding:0 34px 120px}
+@media(max-width:820px){#rail{display:none}main{margin-left:0;padding:0 16px 80px}}
+
+/* ---------- Type & layout ---------- */
+section.alt{padding-top:64px;margin-top:8px}
+.eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:var(--cyan);display:flex;gap:10px;align-items:center}
+.eyebrow .ft{color:var(--amber);border:1px solid var(--line);padding:2px 9px;border-radius:999px}
+h1{font-size:clamp(34px,5.5vw,58px);line-height:1.06;font-weight:700;letter-spacing:-.02em;margin:14px 0 18px}
+h2{font-size:clamp(26px,3.4vw,38px);line-height:1.12;font-weight:700;letter-spacing:-.015em;margin:12px 0 8px}
+h3{font-size:21px;font-weight:600;margin:34px 0 10px;color:var(--ink)}
+h4{font-size:17px;font-weight:600;margin:24px 0 8px;color:var(--cyan)}
+p{color:var(--dim);margin:10px 0;max-width:78ch}
+p b,li b{color:var(--ink);font-weight:600}
+ul,ol{color:var(--dim);margin:10px 0 10px 22px}
+li{margin:7px 0;max-width:76ch}
+a{color:var(--cyan)}
+.lead{font-size:19px;color:var(--ink)}
+hr.sep{border:none;border-top:1px dashed var(--line);margin:46px 0 8px}
+
+/* ---------- Cards / callouts ---------- */
+.why{border:1px solid var(--line);border-left:4px solid var(--amber);background:var(--panel);border-radius:12px;padding:16px 20px;margin:20px 0}
+.why .q{font-family:var(--mono);color:var(--amber);font-size:13px;letter-spacing:.12em;text-transform:uppercase;margin-bottom:6px}
+.key{border:1px solid var(--line);border-left:4px solid var(--green);background:var(--panel);border-radius:12px;padding:16px 20px;margin:20px 0}
+.key .q{font-family:var(--mono);color:var(--green);font-size:13px;letter-spacing:.12em;text-transform:uppercase;margin-bottom:6px}
+.warn{border:1px solid var(--line);border-left:4px solid var(--red);background:var(--panel);border-radius:12px;padding:16px 20px;margin:20px 0}
+.warn .q{font-family:var(--mono);color:var(--red);font-size:13px;letter-spacing:.12em;text-transform:uppercase;margin-bottom:6px}
+.analogy{border:1px dashed var(--violet);background:rgba(167,139,250,.06);border-radius:12px;padding:16px 20px;margin:20px 0}
+.analogy .q{font-family:var(--mono);color:var(--violet);font-size:13px;letter-spacing:.12em;text-transform:uppercase;margin-bottom:6px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+@media(max-width:760px){.grid2,.grid3{grid-template-columns:1fr}}
+.tile{border:1px solid var(--line);background:var(--panel);border-radius:12px;padding:16px 18px}
+.tile h5{font-family:var(--mono);font-size:13px;color:var(--cyan);letter-spacing:.08em;margin-bottom:6px;text-transform:uppercase}
+.tile p{font-size:14.5px;margin:4px 0}
+
+/* ---------- Code ---------- */
+pre{background:#0A101B;border:1px solid var(--line);border-radius:12px;padding:18px 20px;overflow-x:auto;font-family:var(--mono);font-size:13.2px;line-height:1.6;margin:16px 0;position:relative}
+pre .fn{position:absolute;top:0;right:0;background:var(--panel);border-left:1px solid var(--line);border-bottom:1px solid var(--line);border-radius:0 12px 0 10px;padding:3px 12px;font-size:11px;color:var(--amber);letter-spacing:.06em}
+code{font-family:var(--mono);font-size:.92em;background:#0A101B;border:1px solid var(--line);border-radius:6px;padding:1px 6px;color:var(--cyan)}
+pre code{background:none;border:none;padding:0;color:inherit}
+.c-k{color:#5EA1F7}      /* yaml key */
+.c-s{color:#9CE29C}      /* string  */
+.c-n{color:#FFB454}      /* number  */
+.c-c{color:#5B6B82;font-style:italic} /* comment */
+.c-d{color:#A78BFA}      /* directive/keyword */
+
+/* ---------- Tables ---------- */
+table{border-collapse:collapse;width:100%;margin:16px 0;font-size:14.5px}
+th{font-family:var(--mono);font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--cyan);text-align:left;border-bottom:2px solid var(--line);padding:9px 12px}
+td{border-bottom:1px solid var(--line);padding:9px 12px;color:var(--dim);vertical-align:top}
+td b{color:var(--ink)}
+tr:hover td{background:rgba(79,216,235,.04)}
+
+/* ---------- Diagrams ---------- */
+.diagram{border:1px solid var(--line);background:var(--panel2);border-radius:14px;padding:14px;margin:20px 0;overflow-x:auto}
+.diagram .cap{font-family:var(--mono);font-size:12px;color:var(--faint);margin-top:8px;text-align:center}
+svg{display:block;margin:0 auto;max-width:100%}
+svg text{font-family:'IBM Plex Mono',monospace}
+.box{fill:var(--panel);stroke:var(--line);stroke-width:1.4;rx:8}
+.lbl{fill:var(--ink);font-size:12px}
+.sub{fill:var(--dim);font-size:10.5px}
+.tiny{fill:var(--faint);font-size:9.5px}
+.wire{stroke:var(--faint);stroke-width:1.4;fill:none}
+.wire-c{stroke:var(--cyan);stroke-width:1.6;fill:none}
+.wire-a{stroke:var(--amber);stroke-width:1.6;fill:none}
+.wire-g{stroke:var(--green);stroke-width:1.6;fill:none}
+.wire-v{stroke:var(--violet);stroke-width:1.6;fill:none}
+
+/* packet dots that travel along paths (the "gif" effect) */
+.pkt{offset-rotate:0deg;animation:travel 3.2s linear infinite}
+@keyframes travel{0%{offset-distance:0%;opacity:0}6%{opacity:1}92%{opacity:1}100%{offset-distance:100%;opacity:0}}
+.pulse{animation:pulse 2.2s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:.45}50%{opacity:1}}
+.blink{animation:blink 1.3s steps(2) infinite}
+@keyframes blink{50%{opacity:.15}}
+@media(prefers-reduced-motion:reduce){.pkt,.pulse,.blink,.stepglow{animation:none !important}}
+
+/* ---------- Steppers (lifecycles) ---------- */
+.steps{counter-reset:st;margin:18px 0}
+.step{display:flex;gap:16px;padding:14px 0;border-bottom:1px dashed var(--line)}
+.step:last-child{border-bottom:none}
+.step .n{counter-increment:st;flex:0 0 38px;height:38px;border-radius:50%;border:2px solid var(--cyan);color:var(--cyan);font-family:var(--mono);display:flex;align-items:center;justify-content:center;font-size:15px}
+.step .n::before{content:counter(st)}
+.step h5{font-size:15.5px;color:var(--ink);margin-bottom:4px;font-family:var(--disp)}
+.step p{font-size:14.5px;margin:2px 0}
+.step code{font-size:12.5px}
+
+/* ---------- Hero ---------- */
+.hero{min-height:88vh;display:flex;flex-direction:column;justify-content:center;padding-top:40px;position:relative}
+.hero .sub{font-size:19px;color:var(--dim);max-width:64ch}
+.hero-alt{font-family:var(--mono);color:var(--faint);font-size:13px;margin-top:34px;display:flex;flex-wrap:wrap;gap:10px}
+.hero-alt span{border:1px solid var(--line);border-radius:999px;padding:4px 13px}
+.hero-alt span:hover{border-color:var(--cyan);color:var(--cyan)}
+.scrolldown{margin-top:40px;font-family:var(--mono);font-size:12px;color:var(--cyan);letter-spacing:.15em}
+
+/* budget bars */
+.budget{display:flex;height:34px;border-radius:8px;overflow:hidden;border:1px solid var(--line);font-family:var(--mono);font-size:10.5px;margin:14px 0}
+.budget div{display:flex;align-items:center;justify-content:center;color:#0B111B;font-weight:600;white-space:nowrap;overflow:hidden}
+.legend{display:flex;flex-wrap:wrap;gap:14px;font-family:var(--mono);font-size:12px;color:var(--dim)}
+.legend i{display:inline-block;width:11px;height:11px;border-radius:3px;margin-right:6px;vertical-align:-1px}
+
+details{border:1px solid var(--line);border-radius:12px;background:var(--panel);margin:14px 0}
+details summary{cursor:pointer;padding:13px 18px;font-family:var(--mono);font-size:13.5px;color:var(--cyan);list-style:none}
+details summary::before{content:'▸ ';color:var(--amber)}
+details[open] summary::before{content:'▾ '}
+details .inner{padding:0 18px 16px}
+.kbd{font-family:var(--mono);background:#0A101B;border:1px solid var(--line);border-bottom-width:3px;border-radius:6px;padding:1px 7px;font-size:.85em;color:var(--amber)}
+</style>
+</head>
+<body>
+
+<!-- ============ ALTITUDE RAIL ============ -->
+<nav id="rail" aria-label="Altitude navigation">
+  <div id="alt-readout"><b id="altnum">100,000</b>ft</div>
+  <div id="railtrack">
+    <div id="railfill"></div>
+    <div class="plane" id="plane" style="top:0">🛰️</div>
+  </div>
+  <div style="font-family:var(--mono);font-size:10px;color:var(--faint)">GROUND</div>
+</nav>
+
+<main>
+
+<!-- ============ HERO ============ -->
+<header class="hero" id="top">
+  <div class="eyebrow">A COMPLETE DESCENT<span class="ft">100,000 FT → 0 FT</span></div>
+  <h1>Kubernetes,<br>from the satellite view<br>to the wire.</h1>
+  <p class="sub">One page. Every layer. We start where a request is born — a phone in someone's hand — and we descend through DNS, anycast, load balancers, Istio, Envoy, Nginx, the Kubernetes control plane, Docker, Linux namespaces, and finally the physical rack in a data center. At every altitude we ask the same question: <b style="color:var(--amber)">why does this piece exist?</b> Full YAML for everything. Nothing assumed.</p>
+  <div class="hero-alt">
+    <span>1B requests/day</span><span>sub-millisecond hops</span><span>full YAML manifests</span><span>Docker → containerd</span><span>mTLS &amp; CA</span><span>telemetry</span><span>animated flows</span>
+  </div>
+  <div class="scrolldown blink">▼ BEGIN DESCENT</div>
+</header>
+
+<!-- ============ 100,000 FT ============ -->
+<section class="alt" id="s1" data-alt="100000">
+<div class="eyebrow">ALTITUDE 01<span class="ft">100,000 FT</span></div>
+<h2>What is Kubernetes, and why does anyone need it?</h2>
+
+<p class="lead">Before any YAML, one honest question: <b>what problem was so painful that Google, and then the whole industry, built this thing?</b></p>
+
+<div class="analogy"><div class="q">Analogy #1 — The restaurant</div>
+<p>Imagine you run one small restaurant. You (the owner) cook, serve, clean, and take payments. That is <b>one app on one server</b>. Now imagine you suddenly have 500 restaurants across the country. You cannot personally run each one. You need: a head office that decides <b>where</b> new restaurants open, managers who make sure each kitchen is <b>staffed</b>, a system that <b>replaces</b> a sick chef instantly, and a phone line so customers always reach the <b>nearest open</b> restaurant.</p>
+<p><b>Kubernetes is that head office.</b> Your app containers are the chefs. Servers are the buildings. Kubernetes constantly checks: is every kitchen staffed the way the plan says? If not, it fixes it — without waking you up.</p></div>
+
+<div class="why"><div class="q">Why? — The real pain before Kubernetes</div>
+<ul>
+<li><b>Servers die.</b> At the scale of thousands of machines, hardware fails <i>every single day</i>. Somebody (or something) must notice and move your app elsewhere.</li>
+<li><b>Traffic is spiky.</b> A payments app at 9 AM Monday needs 10× the machines it needs at 3 AM. Humans cannot resize fleets by hand fast enough.</li>
+<li><b>Deployments broke things.</b> "It worked on my machine" — different servers had different library versions. Docker fixed packaging; Kubernetes fixed <i>running the packages at scale</i>.</li>
+<li><b>Bin-packing money.</b> If your servers sit 15% utilized, you are burning cash. A scheduler that packs workloads tightly saves millions.</li>
+</ul></div>
+
+<h3>The one sentence that defines Kubernetes</h3>
+<div class="key"><div class="q">Key idea — memorize this</div>
+<p style="font-size:18px;color:var(--ink)">Kubernetes is a <b>reconciliation machine</b>: you declare a <b>desired state</b> ("run 6 copies of my payment API, each with 2 CPU"), it observes the <b>actual state</b> of the world, and it works forever to make actual = desired.</p></div>
+
+<div class="diagram">
+<svg viewBox="0 0 860 210">
+  <rect class="box" x="30" y="60" width="220" height="90" rx="10"/>
+  <text class="lbl" x="140" y="90" text-anchor="middle">DESIRED STATE</text>
+  <text class="sub" x="140" y="112" text-anchor="middle">"6 replicas of payment-api"</text>
+  <text class="sub" x="140" y="130" text-anchor="middle">(what you wrote in YAML)</text>
+
+  <rect class="box" x="610" y="60" width="220" height="90" rx="10"/>
+  <text class="lbl" x="720" y="90" text-anchor="middle">ACTUAL STATE</text>
+  <text class="sub" x="720" y="112" text-anchor="middle">"5 running, 1 node just died"</text>
+  <text class="sub" x="720" y="130" text-anchor="middle">(what exists right now)</text>
+
+  <rect class="box" x="330" y="40" width="200" height="130" rx="14" style="stroke:var(--cyan)"/>
+  <text class="lbl" x="430" y="72" text-anchor="middle" fill="var(--cyan)">CONTROL LOOP</text>
+  <text class="sub" x="430" y="95" text-anchor="middle">observe → diff → act</text>
+  <text class="sub" x="430" y="115" text-anchor="middle">runs forever,</text>
+  <text class="sub" x="430" y="132" text-anchor="middle">every few seconds</text>
+
+  <path id="p-loop1" class="wire-c" d="M250,90 L330,90"/>
+  <path id="p-loop2" class="wire-c" d="M530,90 L610,90"/>
+  <path id="p-loop3" class="wire-a" d="M610,130 C560,190 380,190 330,130" />
+  <circle r="4" fill="var(--cyan)" class="pkt" style="offset-path:path('M250,90 L330,90')"/>
+  <circle r="4" fill="var(--cyan)" class="pkt" style="offset-path:path('M530,90 L610,90');animation-delay:.8s"/>
+  <circle r="4" fill="var(--amber)" class="pkt" style="offset-path:path('M610,130 C560,190 380,190 330,130');animation-delay:1.6s"/>
+  <text class="tiny" x="430" y="200" text-anchor="middle">amber = "actual" flows back in; the loop never stops comparing</text>
+</svg>
+<div class="cap">The reconciliation loop — everything in Kubernetes is a version of this picture</div>
+</div>
+
+<p>Hold onto that picture. A Deployment is a reconciliation loop. The scheduler is a reconciliation loop. The kubelet is a reconciliation loop. Istio's control plane is a reconciliation loop. <b>Once you see the loop, Kubernetes stops being 40 confusing words and becomes one repeated idea.</b></p>
+
+<div class="analogy"><div class="q">Analogy #2 — The thermostat</div>
+<p>A thermostat doesn't "turn on the heater when you press a button." You declare a desired temperature (22°C). It measures actual temperature (18°C), sees the difference, and acts (heat on) until desired = actual. Kubernetes is a building full of thermostats — one per resource type — each guarding a different promise.</p></div>
+
+</section>
+
+<!-- ============ 80,000 FT ============ -->
+<section class="alt" id="s2" data-alt="80000">
+<div class="eyebrow">ALTITUDE 02<span class="ft">80,000 FT</span></div>
+<h2>The data center: where your pod physically lives</h2>
+
+<p class="lead">People learn Kubernetes as if it floats in the cloud. It doesn't. Every pod is a Linux process on a real machine, in a real rack, drawing real power, connected by real cables. Understanding the physical layout explains <b>why</b> zones, topology spread, and network latency exist.</p>
+
+<div class="why"><div class="q">Why care about the physical layer?</div>
+<p>Because latency is physics. Light in fiber travels ~200,000 km/s. A request from Seattle to a Virginia data center pays ~60–70 ms round-trip <i>before any code runs</i>. Inside one data center, rack-to-rack is ~50–200 <b>microseconds</b>. If you must answer in sub-millisecond time, <b>every hop has to stay inside the building</b> — that single fact drives anycast, regional clusters, and cache placement, all of which we'll meet below.</p></div>
+
+<h3>The hierarchy: region → zone → data center → rack → server</h3>
+<div class="diagram">
+<svg viewBox="0 0 880 330">
+  <rect x="15" y="15" width="850" height="300" rx="14" fill="none" stroke="var(--violet)" stroke-dasharray="6 5" stroke-width="1.5"/>
+  <text class="sub" x="30" y="38" fill="var(--violet)">REGION us-west (a metro area, e.g. Oregon)</text>
+
+  <rect x="40" y="55" width="390" height="240" rx="12" fill="none" stroke="var(--blue)" stroke-dasharray="4 4"/>
+  <text class="sub" x="55" y="76" fill="var(--blue)">AVAILABILITY ZONE us-west-a</text>
+  <rect x="450" y="55" width="390" height="240" rx="12" fill="none" stroke="var(--blue)" stroke-dasharray="4 4"/>
+  <text class="sub" x="465" y="76" fill="var(--blue)">AVAILABILITY ZONE us-west-b</text>
+
+  <g>
+    <rect class="box" x="60" y="90" width="170" height="185"/>
+    <text class="sub" x="145" y="110" text-anchor="middle">RACK 12</text>
+    <rect x="75" y="120" width="140" height="26" rx="4" fill="#0A101B" stroke="var(--amber)"/>
+    <text class="tiny" x="145" y="137" text-anchor="middle" fill="var(--amber)">ToR SWITCH (top of rack)</text>
+    <rect x="75" y="152" width="140" height="22" rx="4" fill="#0A101B" stroke="var(--line)"/>
+    <text class="tiny" x="145" y="167" text-anchor="middle">server: k8s node-1</text>
+    <rect x="75" y="180" width="140" height="22" rx="4" fill="#0A101B" stroke="var(--cyan)"/>
+    <text class="tiny" x="145" y="195" text-anchor="middle" fill="var(--cyan)">node-2 ← your pod is here</text>
+    <rect x="75" y="208" width="140" height="22" rx="4" fill="#0A101B" stroke="var(--line)"/>
+    <text class="tiny" x="145" y="223" text-anchor="middle">server: k8s node-3</text>
+    <rect x="75" y="236" width="140" height="22" rx="4" fill="#0A101B" stroke="var(--line)"/>
+    <text class="tiny" x="145" y="251" text-anchor="middle">…42 servers per rack</text>
+  </g>
+  <g>
+    <rect class="box" x="250" y="90" width="170" height="185"/>
+    <text class="sub" x="335" y="110" text-anchor="middle">RACK 13</text>
+    <rect x="265" y="120" width="140" height="26" rx="4" fill="#0A101B" stroke="var(--amber)"/>
+    <text class="tiny" x="335" y="137" text-anchor="middle" fill="var(--amber)">ToR SWITCH</text>
+    <rect x="265" y="152" width="140" height="22" rx="4" fill="#0A101B" stroke="var(--line)"/>
+    <text class="tiny" x="335" y="167" text-anchor="middle">node-4</text>
+    <rect x="265" y="180" width="140" height="22" rx="4" fill="#0A101B" stroke="var(--line)"/>
+    <text class="tiny" x="335" y="195" text-anchor="middle">node-5</text>
+  </g>
+  <g>
+    <rect class="box" x="470" y="90" width="170" height="185"/>
+    <text class="sub" x="555" y="110" text-anchor="middle">RACK 40</text>
+    <rect x="485" y="120" width="140" height="26" rx="4" fill="#0A101B" stroke="var(--amber)"/>
+    <text class="tiny" x="555" y="137" text-anchor="middle" fill="var(--amber)">ToR SWITCH</text>
+    <rect x="485" y="152" width="140" height="22" rx="4" fill="#0A101B" stroke="var(--green)"/>
+    <text class="tiny" x="555" y="167" text-anchor="middle" fill="var(--green)">node-9 ← replica pod</text>
+  </g>
+  <g>
+    <rect class="box" x="660" y="90" width="160" height="185"/>
+    <text class="sub" x="740" y="110" text-anchor="middle">RACK 41</text>
+    <rect x="675" y="120" width="130" height="26" rx="4" fill="#0A101B" stroke="var(--amber)"/>
+    <text class="tiny" x="740" y="137" text-anchor="middle" fill="var(--amber)">ToR SWITCH</text>
+  </g>
+</svg>
+<div class="cap">Two zones = two separate buildings (or halls) with independent power, cooling, and network. A zone can burn down; your app survives because replicas were spread.</div>
+</div>
+
+<div class="grid3">
+<div class="tile"><h5>Region</h5><p>A metro area containing multiple zones, ~1–2 ms between zones. You pick regions to be near users (physics again).</p></div>
+<div class="tile"><h5>Availability Zone</h5><p>One or more buildings with <b>independent</b> power feeds, generators, cooling, and network uplinks. Failure domain #1.</p></div>
+<div class="tile"><h5>Rack</h5><p>A metal cabinet holding ~40 servers plus a Top-of-Rack (ToR) switch. Shares one power strip — so a rack is failure domain #2.</p></div>
+</div>
+
+<h3>The network inside: spine-leaf (Clos) fabric</h3>
+<div class="why"><div class="q">Why spine-leaf and not a simple tree?</div>
+<p>Old data centers used a tree: servers → access switch → aggregation → core. Problem: two servers under different branches had to travel up to the core and back down — the core became a choke point, and east-west traffic (server-to-server, which is 70%+ of modern traffic thanks to microservices) crushed it. Spine-leaf gives <b>every leaf a direct link to every spine</b>, so any server reaches any other server in exactly <b>2 hops</b> (leaf → spine → leaf), with many equal-cost paths (ECMP) to spread load.</p></div>
+
+<div class="diagram">
+<svg viewBox="0 0 860 250">
+  <g>
+    <rect class="box" x="140" y="30" width="130" height="40"/><text class="lbl" x="205" y="55" text-anchor="middle">SPINE 1</text>
+    <rect class="box" x="360" y="30" width="130" height="40"/><text class="lbl" x="425" y="55" text-anchor="middle">SPINE 2</text>
+    <rect class="box" x="580" y="30" width="130" height="40"/><text class="lbl" x="645" y="55" text-anchor="middle">SPINE 3</text>
+  </g>
+  <g>
+    <rect class="box" x="60" y="150" width="140" height="40"/><text class="lbl" x="130" y="175" text-anchor="middle">LEAF (ToR) A</text>
+    <rect class="box" x="250" y="150" width="140" height="40"/><text class="lbl" x="320" y="175" text-anchor="middle">LEAF B</text>
+    <rect class="box" x="440" y="150" width="140" height="40"/><text class="lbl" x="510" y="175" text-anchor="middle">LEAF C</text>
+    <rect class="box" x="630" y="150" width="140" height="40"/><text class="lbl" x="700" y="175" text-anchor="middle">LEAF D</text>
+  </g>
+  <g class="wire" style="opacity:.5">
+    <path d="M130,150 L205,70"/><path d="M130,150 L425,70"/><path d="M130,150 L645,70"/>
+    <path d="M320,150 L205,70"/><path d="M320,150 L425,70"/><path d="M320,150 L645,70"/>
+    <path d="M510,150 L205,70"/><path d="M510,150 L425,70"/><path d="M510,150 L645,70"/>
+    <path d="M700,150 L205,70"/><path d="M700,150 L425,70"/><path d="M700,150 L645,70"/>
+  </g>
+  <path id="ew1" d="M130,150 L425,70 L700,150" fill="none" stroke="none"/>
+  <circle r="4.5" fill="var(--cyan)" class="pkt" style="offset-path:path('M130,150 L425,70 L700,150')"/>
+  <circle r="4.5" fill="var(--green)" class="pkt" style="offset-path:path('M130,150 L205,70 L510,150');animation-delay:1.1s"/>
+  <text class="tiny" x="430" y="225" text-anchor="middle">any server → any server = exactly 2 hops, ~50–200 µs. Multiple equal paths = no single choke point.</text>
+  <text class="sub" x="130" y="215" text-anchor="middle">pod on node under Leaf A</text>
+  <text class="sub" x="700" y="215" text-anchor="middle">pod on node under Leaf D</text>
+</svg>
+<div class="cap">Spine-leaf fabric. Watch the packets take different spines — that is ECMP load-spreading in action.</div>
+</div>
+
+<div class="key"><div class="q">Key numbers to keep in your head</div>
+<table>
+<tr><th>Path</th><th>Typical latency</th><th>Meaning for you</th></tr>
+<tr><td>Same node, pod→pod</td><td><b>~0.02–0.05 ms</b></td><td>loopback-ish; sidecars live here</td></tr>
+<tr><td>Cross-rack, same zone</td><td><b>~0.05–0.2 ms</b></td><td>normal microservice hop</td></tr>
+<tr><td>Zone → zone (same region)</td><td><b>~0.5–2 ms</b></td><td>fine for HA, costly for chatty calls</td></tr>
+<tr><td>Region → region (coast to coast)</td><td><b>~60–70 ms RTT</b></td><td>never in a sub-ms path; async replication only</td></tr>
+<tr><td>User → nearest edge (good CDN/anycast)</td><td><b>~5–30 ms</b></td><td>the part you can't remove, only shrink</td></tr>
+</table></div>
+
+<p><b>This table is the entire reason multi-region architecture exists.</b> "Sub-millisecond response" is only possible for the part of the journey <i>you</i> control — inside the data center. So the game is: get the user's packet to the nearest region fast (anycast), then never leave the building.</p>
+</section>
+
+<!-- ============ 60,000 FT : DOCKER ============ -->
+<section class="alt" id="s3" data-alt="60000">
+<div class="eyebrow">ALTITUDE 03<span class="ft">60,000 FT</span></div>
+<h2>Docker: what a container really is</h2>
+
+<p class="lead">Kubernetes runs containers, so we must be brutally clear on this: <b>a container is not a small virtual machine.</b> It is a normal Linux process wearing three disguises.</p>
+
+<div class="analogy"><div class="q">Analogy — The office building</div>
+<p>A <b>virtual machine</b> is building a whole new house for each tenant: own foundation, plumbing, electricity (own kernel, own OS). Heavy, slow to build, very isolated.<br>
+A <b>container</b> is giving each tenant a locked office inside one shared building: same foundation and plumbing (the host's Linux kernel), but their own door, own furniture, own name plate. They <i>believe</i> they own the building. Cheap, starts in milliseconds.</p></div>
+
+<h3>The three disguises (this is the whole trick)</h3>
+<div class="grid3">
+<div class="tile"><h5>1 · Namespaces = "what can I see?"</h5><p>The kernel lies to the process. <b>PID namespace:</b> "you are process 1, there are no others." <b>Network namespace:</b> "here is your own eth0, your own IP." <b>Mount namespace:</b> "this folder is your entire disk." Also UTS (hostname), IPC, user namespaces.</p></div>
+<div class="tile"><h5>2 · cgroups = "what can I use?"</h5><p>Control groups cap resources: "this process tree may use at most 2 CPUs and 4 GiB RAM." Exceed memory → the kernel OOM-kills you. This is exactly what K8s <code>resources.limits</code> becomes.</p></div>
+<div class="tile"><h5>3 · Union filesystem = "what disk do I have?"</h5><p>The image is a stack of read-only <b>layers</b>; the container adds one thin writable layer on top (OverlayFS). Ten containers from one image share the read-only layers — that's why containers are tiny on disk.</p></div>
+</div>
+
+<div class="diagram">
+<svg viewBox="0 0 860 260">
+  <rect class="box" x="30" y="180" width="800" height="55" style="stroke:var(--amber)"/>
+  <text class="lbl" x="430" y="205" text-anchor="middle" fill="var(--amber)">ONE SHARED LINUX KERNEL (the host)</text>
+  <text class="sub" x="430" y="223" text-anchor="middle">namespaces + cgroups + overlayfs are kernel features — Docker just asks nicely for them</text>
+  <g>
+    <rect class="box" x="60" y="40" width="220" height="120" style="stroke:var(--cyan)"/>
+    <text class="lbl" x="170" y="65" text-anchor="middle" fill="var(--cyan)">container: payment-api</text>
+    <text class="sub" x="170" y="88" text-anchor="middle">sees: PID 1 = java</text>
+    <text class="sub" x="170" y="106" text-anchor="middle">sees: own IP 10.244.1.7</text>
+    <text class="sub" x="170" y="124" text-anchor="middle">capped: 2 CPU / 4Gi</text>
+    <text class="sub" x="170" y="142" text-anchor="middle">disk: image layers + scratch</text>
+  </g>
+  <g>
+    <rect class="box" x="320" y="40" width="220" height="120" style="stroke:var(--green)"/>
+    <text class="lbl" x="430" y="65" text-anchor="middle" fill="var(--green)">container: fraud-svc</text>
+    <text class="sub" x="430" y="88" text-anchor="middle">sees: PID 1 = python</text>
+    <text class="sub" x="430" y="106" text-anchor="middle">sees: own IP 10.244.1.9</text>
+    <text class="sub" x="430" y="124" text-anchor="middle">capped: 1 CPU / 2Gi</text>
+  </g>
+  <g>
+    <rect class="box" x="580" y="40" width="220" height="120" style="stroke:var(--violet)"/>
+    <text class="lbl" x="690" y="65" text-anchor="middle" fill="var(--violet)">container: redis</text>
+    <text class="sub" x="690" y="88" text-anchor="middle">sees: PID 1 = redis-server</text>
+    <text class="sub" x="690" y="106" text-anchor="middle">sees: own IP 10.244.1.12</text>
+  </g>
+  <path class="wire" d="M170,160 L170,180"/><path class="wire" d="M430,160 L430,180"/><path class="wire" d="M690,160 L690,180"/>
+</svg>
+<div class="cap">Three "machines" that are really three processes. Kill the kernel and all three die — that's the isolation trade-off vs VMs.</div>
+</div>
+
+<h3>Images and layers — why builds are fast (or slow)</h3>
+<div class="why"><div class="q">Why layers?</div>
+<p>Every instruction in a Dockerfile creates one immutable layer, identified by a content hash. Layers are cached and shared. If you change only your source code, Docker rebuilds <b>only the layers after the COPY of your code</b> — everything above (OS, JDK, dependencies) is reused from cache. Order your Dockerfile from <i>least-changing</i> to <i>most-changing</i>, and builds drop from minutes to seconds.</p></div>
+
+<div class="diagram">
+<svg viewBox="0 0 860 240">
+  <g>
+    <rect x="80" y="180" width="300" height="34" rx="6" fill="#0A101B" stroke="var(--line)"/><text class="sub" x="230" y="202" text-anchor="middle">L1: eclipse-temurin:21-jre base (read-only)</text>
+    <rect x="80" y="142" width="300" height="34" rx="6" fill="#0A101B" stroke="var(--line)"/><text class="sub" x="230" y="164" text-anchor="middle">L2: apk add curl (read-only)</text>
+    <rect x="80" y="104" width="300" height="34" rx="6" fill="#0A101B" stroke="var(--line)"/><text class="sub" x="230" y="126" text-anchor="middle">L3: COPY libs/ (dependencies, read-only)</text>
+    <rect x="80" y="66" width="300" height="34" rx="6" fill="#0A101B" stroke="var(--cyan)"/><text class="sub" x="230" y="88" text-anchor="middle" fill="var(--cyan)">L4: COPY app.jar (changes every build)</text>
+    <rect x="80" y="28" width="300" height="34" rx="6" fill="#0A101B" stroke="var(--green)" stroke-dasharray="5 4"/><text class="sub" x="230" y="50" text-anchor="middle" fill="var(--green)">writable layer (this container only)</text>
+  </g>
+  <g>
+    <rect x="480" y="180" width="300" height="34" rx="6" fill="#0A101B" stroke="var(--amber)"/><text class="sub" x="630" y="202" text-anchor="middle" fill="var(--amber)">shared with container B — not copied!</text>
+    <rect x="480" y="142" width="300" height="34" rx="6" fill="#0A101B" stroke="var(--amber)"/><text class="sub" x="630" y="164" text-anchor="middle" fill="var(--amber)">shared</text>
+    <rect x="480" y="104" width="300" height="34" rx="6" fill="#0A101B" stroke="var(--amber)"/><text class="sub" x="630" y="126" text-anchor="middle" fill="var(--amber)">shared</text>
+    <rect x="480" y="66" width="300" height="34" rx="6" fill="#0A101B" stroke="var(--amber)"/><text class="sub" x="630" y="88" text-anchor="middle" fill="var(--amber)">shared</text>
+    <rect x="480" y="28" width="300" height="34" rx="6" fill="#0A101B" stroke="var(--green)" stroke-dasharray="5 4"/><text class="sub" x="630" y="50" text-anchor="middle" fill="var(--green)">writable layer (container B)</text>
+  </g>
+  <text class="tiny" x="430" y="232" text-anchor="middle">two containers, one image: read-only layers stored once on disk, only the thin writable layers differ (copy-on-write)</text>
+</svg>
+<div class="cap">OverlayFS: image = stacked read-only layers; each running container adds one scratch layer on top.</div>
+</div>
+
+<h3>A production multi-stage Dockerfile, line by line</h3>
+<div class="why"><div class="q">Why multi-stage?</div>
+<p>Building a Java app needs Maven, a JDK, source code — ~800 MB of tools. <b>Running</b> it needs only a JRE and one jar — ~200 MB. Shipping build tools to production is wasted bandwidth, slower pod startup, and a bigger attack surface (more binaries an attacker can abuse). Multi-stage builds use one stage to compile and a second, tiny stage to run, copying across only the artifact.</p></div>
+
+<pre><span class="fn">Dockerfile</span><code><span class="c-c"># ---------- STAGE 1: build (has JDK + Maven; thrown away) ----------</span>
+<span class="c-d">FROM</span> maven:3.9-eclipse-temurin-21 <span class="c-d">AS</span> build
+<span class="c-d">WORKDIR</span> /src
+
+<span class="c-c"># Copy ONLY the dependency manifest first. If pom.xml is unchanged,</span>
+<span class="c-c"># this layer (and the slow dependency download) comes from cache.</span>
+<span class="c-d">COPY</span> pom.xml .
+<span class="c-d">RUN</span> mvn -q dependency:go-offline
+
+<span class="c-c"># Now copy source — the only part that changes on every commit.</span>
+<span class="c-d">COPY</span> src ./src
+<span class="c-d">RUN</span> mvn -q package -DskipTests
+
+<span class="c-c"># ---------- STAGE 2: runtime (tiny, what actually ships) ----------</span>
+<span class="c-d">FROM</span> eclipse-temurin:21-jre-alpine <span class="c-d">AS</span> runtime
+
+<span class="c-c"># Never run as root. Create an unprivileged user.</span>
+<span class="c-d">RUN</span> addgroup -S app &amp;&amp; adduser -S app -G app
+<span class="c-d">USER</span> app
+<span class="c-d">WORKDIR</span> /app
+
+<span class="c-c"># Pull ONLY the jar from stage 1. Maven, JDK, source: gone.</span>
+<span class="c-d">COPY</span> --from=build --chown=app:app /src/target/payment-api.jar app.jar
+
+<span class="c-c"># Document the port (metadata only — does not open anything).</span>
+<span class="c-d">EXPOSE</span> 8080
+
+<span class="c-c"># Container-level health check (K8s uses its own probes instead,</span>
+<span class="c-c"># but this helps plain-Docker and docker compose setups).</span>
+<span class="c-d">HEALTHCHECK</span> --interval=15s --timeout=3s --retries=3 \
+  CMD wget -qO- http://localhost:8080/healthz || exit 1
+
+<span class="c-c"># exec form (JSON array) = java becomes PID 1 and receives SIGTERM</span>
+<span class="c-c"># directly. Shell form ("java -jar ...") would wrap it in /bin/sh,</span>
+<span class="c-c"># which swallows signals → broken graceful shutdown.</span>
+<span class="c-d">ENTRYPOINT</span> [<span class="c-s">"java"</span>, <span class="c-s">"-XX:MaxRAMPercentage=75"</span>, <span class="c-s">"-jar"</span>, <span class="c-s">"app.jar"</span>]</code></pre>
+
+<div class="key"><div class="q">Key Dockerfile rules (interview-grade)</div>
+<ul>
+<li><b>Order layers by change frequency:</b> base → OS packages → dependencies → source code. Cache hit rate decides build speed.</li>
+<li><b>Pin versions</b> (<code>maven:3.9-...-21</code>, never <code>latest</code>) — builds must be reproducible.</li>
+<li><b>USER app</b>, never root. Combine with K8s <code>runAsNonRoot: true</code>.</li>
+<li><b>ENTRYPOINT in exec form</b> so PID 1 gets SIGTERM → graceful shutdown works.</li>
+<li><b>.dockerignore</b> (<code>.git</code>, <code>target/</code>, <code>node_modules</code>) — keeps the build context small and secrets out of images.</li>
+<li><b>One process per container.</b> Need a helper? That's a second container in the same pod (sidecar), not a second process.</li>
+</ul></div>
+
+<h3>docker compose — the whole dev environment in one file</h3>
+<div class="why"><div class="q">Why compose if we have Kubernetes?</div>
+<p>Compose is for your laptop: one command (<code>docker compose up</code>) brings up app + database + cache with networking and volumes wired. It is a <i>local rehearsal</i> of what K8s does in production — same images, simpler orchestration, zero cluster needed.</p></div>
+
+<pre><span class="fn">docker-compose.yml</span><code><span class="c-k">services</span>:
+  <span class="c-k">payment-api</span>:
+    <span class="c-k">build</span>:
+      <span class="c-k">context</span>: <span class="c-s">.</span>
+      <span class="c-k">dockerfile</span>: <span class="c-s">Dockerfile</span>
+      <span class="c-k">target</span>: <span class="c-s">runtime</span>          <span class="c-c"># build only up to the runtime stage</span>
+    <span class="c-k">ports</span>:
+      - <span class="c-s">"8080:8080"</span>            <span class="c-c"># hostPort:containerPort</span>
+    <span class="c-k">environment</span>:
+      <span class="c-k">SPRING_PROFILES_ACTIVE</span>: <span class="c-s">local</span>
+      <span class="c-k">DB_HOST</span>: <span class="c-s">postgres</span>        <span class="c-c"># service name IS the DNS name</span>
+      <span class="c-k">REDIS_HOST</span>: <span class="c-s">redis</span>
+    <span class="c-k">depends_on</span>:
+      <span class="c-k">postgres</span>:
+        <span class="c-k">condition</span>: <span class="c-s">service_healthy</span>  <span class="c-c"># wait until pg healthcheck passes</span>
+      <span class="c-k">redis</span>:
+        <span class="c-k">condition</span>: <span class="c-s">service_started</span>
+    <span class="c-k">deploy</span>:
+      <span class="c-k">resources</span>:
+        <span class="c-k">limits</span>: { <span class="c-k">cpus</span>: <span class="c-s">"2"</span>, <span class="c-k">memory</span>: <span class="c-s">1g</span> }   <span class="c-c"># cgroups, same idea as K8s limits</span>
+
+  <span class="c-k">postgres</span>:
+    <span class="c-k">image</span>: <span class="c-s">postgres:16-alpine</span>
+    <span class="c-k">environment</span>:
+      <span class="c-k">POSTGRES_DB</span>: <span class="c-s">payments</span>
+      <span class="c-k">POSTGRES_PASSWORD</span>: <span class="c-s">localdev</span>   <span class="c-c"># local only — never in prod files</span>
+    <span class="c-k">volumes</span>:
+      - <span class="c-s">pgdata:/var/lib/postgresql/data</span> <span class="c-c"># named volume: data survives restarts</span>
+    <span class="c-k">healthcheck</span>:
+      <span class="c-k">test</span>: [<span class="c-s">"CMD-SHELL"</span>, <span class="c-s">"pg_isready -U postgres"</span>]
+      <span class="c-k">interval</span>: <span class="c-s">5s</span>
+      <span class="c-k">retries</span>: <span class="c-n">10</span>
+
+  <span class="c-k">redis</span>:
+    <span class="c-k">image</span>: <span class="c-s">redis:7-alpine</span>
+    <span class="c-k">command</span>: [<span class="c-s">"redis-server"</span>, <span class="c-s">"--maxmemory"</span>, <span class="c-s">"256mb"</span>, <span class="c-s">"--maxmemory-policy"</span>, <span class="c-s">"allkeys-lru"</span>]
+
+<span class="c-k">volumes</span>:
+  <span class="c-k">pgdata</span>:</code></pre>
+
+<details><summary>Docker commands you actually use, with what each really does</summary><div class="inner">
+<table>
+<tr><th>Command</th><th>What happens underneath</th></tr>
+<tr><td><code>docker build -t payment-api:1.4.2 .</code></td><td>Sends the build context to the daemon, executes Dockerfile top-down, one cached layer per step, tags the final layer stack.</td></tr>
+<tr><td><code>docker run -d -p 8080:8080 payment-api:1.4.2</code></td><td>Creates namespaces + cgroups, mounts the layer stack via overlayfs, adds a writable layer, starts ENTRYPOINT as PID 1, sets an iptables DNAT rule host:8080 → container:8080.</td></tr>
+<tr><td><code>docker exec -it &lt;id&gt; sh</code></td><td>Starts a new process <i>inside the container's existing namespaces</i> — that's why you "enter" it.</td></tr>
+<tr><td><code>docker logs -f &lt;id&gt;</code></td><td>Tails the JSON file where the daemon captured the process's stdout/stderr. (Rule: containers log to stdout, never to files.)</td></tr>
+<tr><td><code>docker image history payment-api:1.4.2</code></td><td>Shows every layer with size — your #1 tool for hunting image bloat.</td></tr>
+<tr><td><code>docker system prune -a</code></td><td>Deletes stopped containers, unused networks, dangling and unused images. Reclaims the disk your laptop is crying about.</td></tr>
+</table>
+<p><b>Important for K8s:</b> Kubernetes no longer uses Docker Engine on its nodes. It talks to <b>containerd</b> (or CRI-O) through the CRI interface. Your Docker-built images still work everywhere because they follow the <b>OCI image format</b> — Docker is the build tool; containerd is the runtime on the node.</p>
+</div></details>
+</section>
+
+<!-- ============ 40,000 FT : K8S ARCHITECTURE ============ -->
+<section class="alt" id="s4" data-alt="40000">
+<div class="eyebrow">ALTITUDE 04<span class="ft">40,000 FT</span></div>
+<h2>Kubernetes architecture: the machine that runs the loop</h2>
+
+<p class="lead">Now open the hood. A cluster is just two kinds of machines: a few <b>control plane</b> nodes (the brain) and many <b>worker</b> nodes (the muscle). Every component below is one of those thermostats from Altitude 01 — each guards a different promise.</p>
+
+<div class="diagram">
+<svg viewBox="0 0 880 460">
+  <!-- Control plane -->
+  <rect x="20" y="20" width="840" height="190" rx="14" fill="none" stroke="var(--violet)" stroke-dasharray="6 5"/>
+  <text class="sub" x="40" y="44" fill="var(--violet)">CONTROL PLANE (usually 3 nodes for HA — quorum!)</text>
+
+  <rect class="box" x="330" y="60" width="220" height="70" style="stroke:var(--cyan)"/>
+  <text class="lbl" x="440" y="88" text-anchor="middle" fill="var(--cyan)">kube-apiserver</text>
+  <text class="sub" x="440" y="108" text-anchor="middle">the ONLY front door</text>
+
+  <rect class="box" x="40" y="60" width="200" height="70"/>
+  <text class="lbl" x="140" y="88" text-anchor="middle">etcd</text>
+  <text class="sub" x="140" y="108" text-anchor="middle">key-value truth store (Raft)</text>
+
+  <rect class="box" x="620" y="55" width="220" height="55"/>
+  <text class="lbl" x="730" y="78" text-anchor="middle">kube-scheduler</text>
+  <text class="sub" x="730" y="96" text-anchor="middle">picks a node for each pod</text>
+
+  <rect class="box" x="620" y="125" width="220" height="60"/>
+  <text class="lbl" x="730" y="148" text-anchor="middle">controller-manager</text>
+  <text class="sub" x="730" y="168" text-anchor="middle">Deployment/RS/Node loops</text>
+
+  <path class="wire-v" d="M240,95 L330,95"/>
+  <path class="wire-v" d="M550,90 L620,85"/>
+  <path class="wire-v" d="M550,105 L620,150"/>
+  <circle r="4" fill="var(--violet)" class="pkt" style="offset-path:path('M330,95 L240,95')"/>
+  <circle r="4" fill="var(--violet)" class="pkt" style="offset-path:path('M620,85 L550,90');animation-delay:.7s"/>
+
+  <!-- Workers -->
+  <g>
+    <rect x="20" y="240" width="405" height="200" rx="14" fill="none" stroke="var(--blue)" stroke-dasharray="4 4"/>
+    <text class="sub" x="40" y="264" fill="var(--blue)">WORKER NODE 1</text>
+    <rect class="box" x="45" y="280" width="170" height="52"/>
+    <text class="lbl" x="130" y="302" text-anchor="middle">kubelet</text>
+    <text class="sub" x="130" y="320" text-anchor="middle">node agent (a loop!)</text>
+    <rect class="box" x="230" y="280" width="175" height="52"/>
+    <text class="lbl" x="317" y="302" text-anchor="middle">kube-proxy</text>
+    <text class="sub" x="317" y="320" text-anchor="middle">Service → pod routing</text>
+    <rect class="box" x="45" y="345" width="170" height="52"/>
+    <text class="lbl" x="130" y="367" text-anchor="middle">containerd</text>
+    <text class="sub" x="130" y="385" text-anchor="middle">runs containers (CRI)</text>
+    <rect class="box" x="230" y="345" width="175" height="52" style="stroke:var(--green)"/>
+    <text class="lbl" x="317" y="367" text-anchor="middle" fill="var(--green)">pods…</text>
+    <text class="sub" x="317" y="385" text-anchor="middle">payment-api-7d4f…</text>
+  </g>
+  <g>
+    <rect x="455" y="240" width="405" height="200" rx="14" fill="none" stroke="var(--blue)" stroke-dasharray="4 4"/>
+    <text class="sub" x="475" y="264" fill="var(--blue)">WORKER NODE 2 … NODE 5,000</text>
+    <rect class="box" x="480" y="280" width="170" height="52"/>
+    <text class="lbl" x="565" y="302" text-anchor="middle">kubelet</text>
+    <rect class="box" x="665" y="280" width="175" height="52"/>
+    <text class="lbl" x="752" y="302" text-anchor="middle">kube-proxy</text>
+    <rect class="box" x="480" y="345" width="360" height="52" style="stroke:var(--green)"/>
+    <text class="lbl" x="660" y="375" text-anchor="middle" fill="var(--green)">pods… (CNI gives each pod its own IP)</text>
+  </g>
+  <path class="wire-c" d="M400,130 L130,280"/>
+  <path class="wire-c" d="M480,130 L565,280"/>
+  <circle r="4" fill="var(--cyan)" class="pkt" style="offset-path:path('M130,280 L400,130');animation-delay:.3s"/>
+  <circle r="4" fill="var(--cyan)" class="pkt" style="offset-path:path('M565,280 L480,130');animation-delay:1.4s"/>
+  <text class="tiny" x="440" y="455" text-anchor="middle">kubelets WATCH the API server (pull, not push) — the API server never reaches into nodes to command them</text>
+</svg>
+<div class="cap">The whole machine. Note the direction of the cyan packets: agents pull their orders. This is why a cluster survives a control-plane outage — pods keep running.</div>
+</div>
+
+<h3>Each component, and the promise it guards</h3>
+<table>
+<tr><th>Component</th><th>Its promise ("desired state" it enforces)</th><th>Why it exists</th></tr>
+<tr><td><b>kube-apiserver</b></td><td>"All reads/writes of cluster state go through me, authenticated, authorized, validated."</td><td>One front door = one place for authn (who are you?), authz/RBAC (may you?), admission control (is this object sane?), and audit logs. Nothing talks to etcd directly except the API server.</td></tr>
+<tr><td><b>etcd</b></td><td>"I am the single source of truth, consistent across replicas."</td><td>Uses the Raft consensus algorithm; with 3 members it tolerates 1 failure, with 5 it tolerates 2. Lose etcd quorum → cluster becomes read-only brain-dead (existing pods still run!).</td></tr>
+<tr><td><b>kube-scheduler</b></td><td>"Every pod with no node gets the best node."</td><td>Two phases: <b>filter</b> (which nodes CAN run it: enough CPU? right zone? tolerates taints?) then <b>score</b> (which node SHOULD: spread, bin-packing, affinity). Writes only one field: <code>pod.spec.nodeName</code>.</td></tr>
+<tr><td><b>controller-manager</b></td><td>"Every controller loop runs: Deployment→ReplicaSet→Pods, Node health, Endpoints, Jobs…"</td><td>~30 thermostats in one binary. The Deployment controller is what performs rolling updates.</td></tr>
+<tr><td><b>kubelet</b></td><td>"Every pod assigned to MY node is actually running and healthy."</td><td>Watches the API server for pods with its nodeName, tells containerd to pull images and start containers, runs liveness/readiness probes, reports status back.</td></tr>
+<tr><td><b>kube-proxy</b></td><td>"Traffic to any Service IP reaches a healthy backend pod."</td><td>Programs iptables/IPVS rules on every node so the virtual Service IP (which no machine owns!) gets DNAT'ed to a real pod IP. At very large scale, eBPF (Cilium) replaces it.</td></tr>
+<tr><td><b>CNI plugin</b></td><td>"Every pod gets a routable IP; any pod can reach any pod."</td><td>Calico/Cilium/AWS-VPC-CNI wire the pod network. Pod-to-pod with no NAT is a core K8s guarantee.</td></tr>
+<tr><td><b>CoreDNS</b></td><td>"Names like payment-api.payments.svc.cluster.local resolve to Service IPs."</td><td>Service discovery. Your code calls a stable name, never a pod IP (pods are cattle; their IPs churn constantly).</td></tr>
+</table>
+
+<h3>Life of a pod: from <span class="kbd">kubectl apply</span> to running process</h3>
+<p>This sequence is the most asked "explain Kubernetes" interview question. Walk it slowly — every arrow is a separate actor doing its own small job:</p>
+
+<div class="steps">
+<div class="step"><span class="n"></span><div><h5>You apply a Deployment</h5><p><code>kubectl apply -f deploy.yaml</code> → HTTPS POST to the API server. It authenticates you (client cert/OIDC token), checks RBAC ("may this user create Deployments in namespace payments?"), runs admission webhooks (e.g. "inject the Istio sidecar", "reject containers running as root"), then persists the object to etcd. <b>Nothing is running yet.</b> Only a record exists.</p></div></div>
+<div class="step"><span class="n"></span><div><h5>Deployment controller wakes up</h5><p>It was WATCHing for Deployments. New desired state: 6 replicas. Actual: 0. It creates a <b>ReplicaSet</b> object (the versioned "cookie cutter" for pods).</p></div></div>
+<div class="step"><span class="n"></span><div><h5>ReplicaSet controller stamps out Pods</h5><p>Desired 6, actual 0 → it creates 6 Pod objects in etcd. Each pod has <b>no node assigned</b> — status: Pending.</p></div></div>
+<div class="step"><span class="n"></span><div><h5>Scheduler assigns nodes</h5><p>Watching for unscheduled pods, it filters nodes (enough free CPU/mem? matching nodeSelector? tolerations vs taints? topology spread satisfied?) and scores the survivors. It binds each pod: sets <code>spec.nodeName: node-2</code>. Still nothing running — this was just another etcd write.</p></div></div>
+<div class="step"><span class="n"></span><div><h5>kubelet on node-2 sees its new pod</h5><p>Asks containerd via CRI: pull <code>registry.tmo.example/payment-api:1.4.2</code> (layers cached? skip), create the network namespace, call the CNI plugin → pod gets IP 10.244.1.7, start init containers, then app containers with the cgroup limits from the YAML.</p></div></div>
+<div class="step"><span class="n"></span><div><h5>Probes gate the traffic</h5><p>kubelet runs the <b>startup</b> probe (is the JVM even up yet?), then <b>readiness</b> (may I send traffic?) and <b>liveness</b> (should I restart you?). Only when readiness passes does the pod's IP get added to the Service's <b>EndpointSlice</b>.</p></div></div>
+<div class="step"><span class="n"></span><div><h5>kube-proxy + DNS make it reachable</h5><p>kube-proxy on <i>every</i> node updates iptables/IPVS: Service IP 10.96.14.3:80 → {10.244.1.7:8080, …}. CoreDNS already resolves <code>payment-api.payments</code> to 10.96.14.3. The pod is now serving.</p></div></div>
+</div>
+
+<div class="key"><div class="q">Key insight</div>
+<p>Notice what did NOT happen: no component sent a command to another component. Each one only <b>wrote to the API server</b> and <b>watched the API server</b>. This "choreography via shared state" is why Kubernetes scales and why components can crash and recover independently — the state is the message bus.</p></div>
+
+<h3>Pod lifecycle & the termination dance (where outages hide)</h3>
+<div class="grid2">
+<div class="tile"><h5>Pod phases</h5><p><b>Pending</b> → scheduled but containers not all started (image pulling, no room, or unschedulable).<br><b>Running</b> → bound to a node, at least one container running.<br><b>Succeeded / Failed</b> → all containers exited (0 / non-zero). Jobs live here.<br><b>Unknown</b> → node stopped reporting.</p></div>
+<div class="tile"><h5>Container states</h5><p><b>Waiting</b> (ImagePullBackOff, CrashLoopBackOff live here — read the <i>reason</i>!),<br><b>Running</b>,<br><b>Terminated</b> (exit code + reason, e.g. OOMKilled=137).</p></div>
+</div>
+
+<div class="why"><div class="q">Why do rolling deploys drop requests if you skip this?</div>
+<p>When a pod is deleted, <b>two things happen in parallel</b>: (a) kubelet sends SIGTERM to your process, and (b) the endpoint controller removes the pod from EndpointSlices, and every kube-proxy / Envoy must then update its routing. (b) takes 1–3 seconds to propagate. If your app dies instantly on SIGTERM, load balancers keep sending it traffic for those seconds → 502s during every deploy. The fix is a <b>preStop sleep</b> — keep serving while the network forgets you:</p></div>
+
+<div class="diagram">
+<svg viewBox="0 0 860 190">
+  <line x1="60" y1="60" x2="820" y2="60" class="wire"/>
+  <circle cx="60" cy="60" r="6" fill="var(--red)"/><text class="sub" x="60" y="40" text-anchor="middle">t=0 delete</text>
+  <rect x="60" y="80" width="260" height="26" rx="6" fill="rgba(255,180,84,.18)" stroke="var(--amber)"/><text class="tiny" x="190" y="97" text-anchor="middle" fill="var(--amber)">preStop: sleep 8s (still serving!)</text>
+  <rect x="60" y="115" width="220" height="26" rx="6" fill="rgba(94,161,247,.15)" stroke="var(--blue)"/><text class="tiny" x="170" y="132" text-anchor="middle" fill="var(--blue)">endpoints removed → LBs drain (1–3s)</text>
+  <circle cx="320" cy="60" r="6" fill="var(--amber)"/><text class="sub" x="320" y="40" text-anchor="middle">SIGTERM</text>
+  <rect x="320" y="80" width="300" height="26" rx="6" fill="rgba(88,214,141,.15)" stroke="var(--green)"/><text class="tiny" x="470" y="97" text-anchor="middle" fill="var(--green)">app finishes in-flight requests, closes pools</text>
+  <circle cx="700" cy="60" r="6" fill="var(--red)"/><text class="sub" x="700" y="40" text-anchor="middle">SIGKILL (grace 30s up)</text>
+  <circle r="5" fill="var(--cyan)" class="pkt" style="offset-path:path('M60,60 L700,60');animation-duration:4s"/>
+  <text class="tiny" x="440" y="175" text-anchor="middle">terminationGracePeriodSeconds must be &gt; preStop + longest request time, or SIGKILL cuts requests mid-flight</text>
+</svg>
+<div class="cap">Graceful termination timeline. The preStop sleep is the cheapest zero-downtime trick in Kubernetes.</div>
+</div>
+</section>
+
+<!-- ============ 30,000 FT : FULL YAML ============ -->
+<section class="alt" id="s5" data-alt="30000">
+<div class="eyebrow">ALTITUDE 05<span class="ft">30,000 FT</span></div>
+<h2>Every core object, full YAML, every field explained</h2>
+
+<p class="lead">This is the working library. One realistic app — <b>payment-api</b> in namespace <b>payments</b> — expressed as complete, production-shaped manifests. Read the comments; they carry the "why" for each field.</p>
+
+<h3>1 · Namespace + ResourceQuota — the apartment walls</h3>
+<div class="why"><div class="q">Why namespaces?</div><p>One cluster, many teams. Namespaces give each team a scoped world: their own names, their own RBAC, their own quotas. Without quotas, one team's runaway job can starve the whole cluster — quotas make the blast radius a wall, not a suggestion.</p></div>
+<pre><span class="fn">00-namespace.yaml</span><code><span class="c-k">apiVersion</span>: <span class="c-s">v1</span>
+<span class="c-k">kind</span>: <span class="c-s">Namespace</span>
+<span class="c-k">metadata</span>:
+  <span class="c-k">name</span>: <span class="c-s">payments</span>
+  <span class="c-k">labels</span>:
+    <span class="c-k">team</span>: <span class="c-s">payments-platform</span>
+    <span class="c-k">istio-injection</span>: <span class="c-s">enabled</span>      <span class="c-c"># Istio auto-injects Envoy sidecars here</span>
+---
+<span class="c-k">apiVersion</span>: <span class="c-s">v1</span>
+<span class="c-k">kind</span>: <span class="c-s">ResourceQuota</span>
+<span class="c-k">metadata</span>:
+  <span class="c-k">name</span>: <span class="c-s">payments-quota</span>
+  <span class="c-k">namespace</span>: <span class="c-s">payments</span>
+<span class="c-k">spec</span>:
+  <span class="c-k">hard</span>:
+    <span class="c-k">requests.cpu</span>: <span class="c-s">"200"</span>          <span class="c-c"># team may request at most 200 cores total</span>
+    <span class="c-k">requests.memory</span>: <span class="c-s">400Gi</span>
+    <span class="c-k">limits.cpu</span>: <span class="c-s">"400"</span>
+    <span class="c-k">limits.memory</span>: <span class="c-s">800Gi</span>
+    <span class="c-k">pods</span>: <span class="c-s">"500"</span></code></pre>
+
+<h3>2 · ConfigMap — configuration that is NOT secret</h3>
+<div class="why"><div class="q">Why not bake config into the image?</div><p>The same image must run in dev, staging, and prod. Config differs per environment; the image must not. ConfigMaps decouple them: build once, configure everywhere. (Twelve-factor app, factor III.)</p></div>
+<pre><span class="fn">10-configmap.yaml</span><code><span class="c-k">apiVersion</span>: <span class="c-s">v1</span>
+<span class="c-k">kind</span>: <span class="c-s">ConfigMap</span>
+<span class="c-k">metadata</span>:
+  <span class="c-k">name</span>: <span class="c-s">payment-api-config</span>
+  <span class="c-k">namespace</span>: <span class="c-s">payments</span>
+<span class="c-k">data</span>:
+  <span class="c-c"># Simple keys → injected as env vars below</span>
+  <span class="c-k">DB_HOST</span>: <span class="c-s">"payments-db.payments.svc.cluster.local"</span>
+  <span class="c-k">DB_POOL_SIZE</span>: <span class="c-s">"40"</span>
+  <span class="c-k">CACHE_TTL_SECONDS</span>: <span class="c-s">"300"</span>
+  <span class="c-k">FEATURE_NEW_LEDGER</span>: <span class="c-s">"false"</span>
+  <span class="c-c"># Whole file → mounted as a volume below</span>
+  <span class="c-k">application.yaml</span>: |
+    <span class="c-s">server:</span>
+      <span class="c-s">shutdown: graceful</span>
+    <span class="c-s">management.endpoints.web.exposure.include: health,prometheus</span></code></pre>
+
+<h3>3 · Secret — the same idea, but access-controlled</h3>
+<div class="warn"><div class="q">Honest truth about Secrets</div><p>A Secret's values are only <b>base64-encoded, not encrypted</b> — base64 is a format, not a lock. What makes Secrets safer than ConfigMaps: RBAC can grant config read without secret read, they can be encrypted at rest in etcd (<code>EncryptionConfiguration</code> with a KMS), kubelet keeps them in tmpfs (RAM) not disk, and they are not shown in <code>kubectl describe pod</code>. In serious setups, the values live in Vault / AWS Secrets Manager / Azure Key Vault and are synced in by External Secrets Operator — Git never sees them.</p></div>
+<pre><span class="fn">11-secret.yaml</span><code><span class="c-k">apiVersion</span>: <span class="c-s">v1</span>
+<span class="c-k">kind</span>: <span class="c-s">Secret</span>
+<span class="c-k">metadata</span>:
+  <span class="c-k">name</span>: <span class="c-s">payment-api-secrets</span>
+  <span class="c-k">namespace</span>: <span class="c-s">payments</span>
+<span class="c-k">type</span>: <span class="c-s">Opaque</span>
+<span class="c-k">stringData</span>:                       <span class="c-c"># stringData = write plain, stored base64</span>
+  <span class="c-k">DB_PASSWORD</span>: <span class="c-s">"REPLACED-BY-EXTERNAL-SECRETS"</span>
+  <span class="c-k">STRIPE_API_KEY</span>: <span class="c-s">"REPLACED-BY-EXTERNAL-SECRETS"</span>
+---
+<span class="c-c"># Registry credential so kubelet can pull private images</span>
+<span class="c-k">apiVersion</span>: <span class="c-s">v1</span>
+<span class="c-k">kind</span>: <span class="c-s">Secret</span>
+<span class="c-k">metadata</span>:
+  <span class="c-k">name</span>: <span class="c-s">regcred</span>
+  <span class="c-k">namespace</span>: <span class="c-s">payments</span>
+<span class="c-k">type</span>: <span class="c-s">kubernetes.io/dockerconfigjson</span>
+<span class="c-k">data</span>:
+  <span class="c-k">.dockerconfigjson</span>: <span class="c-s">eyJhdXRocyI6ey4uLn19</span>   <span class="c-c"># base64 of docker config</span></code></pre>
+
+<h3>4 · ServiceAccount + RBAC — identity and permissions (auth inside the cluster)</h3>
+<div class="why"><div class="q">Why does a pod need an identity?</div><p>Two reasons. (1) If the pod calls the Kubernetes API (many apps and all operators do), RBAC must know <i>who</i> is asking. (2) Cloud IAM federation: the ServiceAccount token can be exchanged for AWS/Azure/GCP credentials (IRSA / Workload Identity) — no long-lived cloud keys in your cluster. Principle of least privilege: this app can read its own ConfigMaps/Secrets and nothing else.</p></div>
+<pre><span class="fn">20-rbac.yaml</span><code><span class="c-k">apiVersion</span>: <span class="c-s">v1</span>
+<span class="c-k">kind</span>: <span class="c-s">ServiceAccount</span>
+<span class="c-k">metadata</span>:
+  <span class="c-k">name</span>: <span class="c-s">payment-api-sa</span>
+  <span class="c-k">namespace</span>: <span class="c-s">payments</span>
+<span class="c-k">automountServiceAccountToken</span>: <span class="c-s">false</span>  <span class="c-c"># don't mount API creds unless needed</span>
+---
+<span class="c-k">apiVersion</span>: <span class="c-s">rbac.authorization.k8s.io/v1</span>
+<span class="c-k">kind</span>: <span class="c-s">Role</span>                          <span class="c-c"># Role = namespaced; ClusterRole = cluster-wide</span>
+<span class="c-k">metadata</span>:
+  <span class="c-k">name</span>: <span class="c-s">payment-api-role</span>
+  <span class="c-k">namespace</span>: <span class="c-s">payments</span>
+<span class="c-k">rules</span>:
+- <span class="c-k">apiGroups</span>: [<span class="c-s">""</span>]                  <span class="c-c"># "" = core API group</span>
+  <span class="c-k">resources</span>: [<span class="c-s">"configmaps"</span>]
+  <span class="c-k">verbs</span>: [<span class="c-s">"get"</span>, <span class="c-s">"list"</span>, <span class="c-s">"watch"</span>]
+- <span class="c-k">apiGroups</span>: [<span class="c-s">""</span>]
+  <span class="c-k">resources</span>: [<span class="c-s">"secrets"</span>]
+  <span class="c-k">verbs</span>: [<span class="c-s">"get"</span>]
+  <span class="c-k">resourceNames</span>: [<span class="c-s">"payment-api-secrets"</span>]  <span class="c-c"># ONLY this one secret</span>
+---
+<span class="c-k">apiVersion</span>: <span class="c-s">rbac.authorization.k8s.io/v1</span>
+<span class="c-k">kind</span>: <span class="c-s">RoleBinding</span>                   <span class="c-c"># glue: who ← gets → which role</span>
+<span class="c-k">metadata</span>:
+  <span class="c-k">name</span>: <span class="c-s">payment-api-binding</span>
+  <span class="c-k">namespace</span>: <span class="c-s">payments</span>
+<span class="c-k">subjects</span>:
+- <span class="c-k">kind</span>: <span class="c-s">ServiceAccount</span>
+  <span class="c-k">name</span>: <span class="c-s">payment-api-sa</span>
+  <span class="c-k">namespace</span>: <span class="c-s">payments</span>
+<span class="c-k">roleRef</span>:
+  <span class="c-k">kind</span>: <span class="c-s">Role</span>
+  <span class="c-k">name</span>: <span class="c-s">payment-api-role</span>
+  <span class="c-k">apiGroup</span>: <span class="c-s">rbac.authorization.k8s.io</span></code></pre>
+
+<h3>5 · Deployment — the centerpiece (read every comment)</h3>
+<pre><span class="fn">30-deployment.yaml</span><code><span class="c-k">apiVersion</span>: <span class="c-s">apps/v1</span>
+<span class="c-k">kind</span>: <span class="c-s">Deployment</span>
+<span class="c-k">metadata</span>:
+  <span class="c-k">name</span>: <span class="c-s">payment-api</span>
+  <span class="c-k">namespace</span>: <span class="c-s">payments</span>
+  <span class="c-k">labels</span>: { <span class="c-k">app</span>: <span class="c-s">payment-api</span>, <span class="c-k">version</span>: <span class="c-s">v1</span> }
+<span class="c-k">spec</span>:
+  <span class="c-k">replicas</span>: <span class="c-n">6</span>                       <span class="c-c"># HPA will own this number later</span>
+  <span class="c-k">revisionHistoryLimit</span>: <span class="c-n">5</span>           <span class="c-c"># keep 5 old ReplicaSets for rollback</span>
+  <span class="c-k">strategy</span>:
+    <span class="c-k">type</span>: <span class="c-s">RollingUpdate</span>
+    <span class="c-k">rollingUpdate</span>:
+      <span class="c-k">maxSurge</span>: <span class="c-s">25%</span>                <span class="c-c"># may run 25% extra pods during rollout</span>
+      <span class="c-k">maxUnavailable</span>: <span class="c-n">0</span>            <span class="c-c"># NEVER dip below desired capacity</span>
+  <span class="c-k">selector</span>:
+    <span class="c-k">matchLabels</span>: { <span class="c-k">app</span>: <span class="c-s">payment-api</span> }   <span class="c-c"># must match template labels; immutable</span>
+  <span class="c-k">template</span>:                         <span class="c-c"># ↓ the Pod recipe stamped per replica</span>
+    <span class="c-k">metadata</span>:
+      <span class="c-k">labels</span>: { <span class="c-k">app</span>: <span class="c-s">payment-api</span>, <span class="c-k">version</span>: <span class="c-s">v1</span> }
+      <span class="c-k">annotations</span>:
+        <span class="c-k">prometheus.io/scrape</span>: <span class="c-s">"true"</span>       <span class="c-c"># telemetry: scrape me</span>
+        <span class="c-k">prometheus.io/port</span>: <span class="c-s">"8080"</span>
+        <span class="c-k">prometheus.io/path</span>: <span class="c-s">"/actuator/prometheus"</span>
+    <span class="c-k">spec</span>:
+      <span class="c-k">serviceAccountName</span>: <span class="c-s">payment-api-sa</span>
+      <span class="c-k">imagePullSecrets</span>:
+      - <span class="c-k">name</span>: <span class="c-s">regcred</span>
+      <span class="c-k">terminationGracePeriodSeconds</span>: <span class="c-n">45</span>  <span class="c-c"># &gt; preStop(8) + slowest request</span>
+
+      <span class="c-c"># ---- spread replicas so one failure domain can't take us out ----</span>
+      <span class="c-k">topologySpreadConstraints</span>:
+      - <span class="c-k">maxSkew</span>: <span class="c-n">1</span>
+        <span class="c-k">topologyKey</span>: <span class="c-s">topology.kubernetes.io/zone</span>   <span class="c-c"># spread across zones</span>
+        <span class="c-k">whenUnsatisfiable</span>: <span class="c-s">DoNotSchedule</span>
+        <span class="c-k">labelSelector</span>: { <span class="c-k">matchLabels</span>: { <span class="c-k">app</span>: <span class="c-s">payment-api</span> } }
+      <span class="c-k">affinity</span>:
+        <span class="c-k">podAntiAffinity</span>:                              <span class="c-c"># avoid same node</span>
+          <span class="c-k">preferredDuringSchedulingIgnoredDuringExecution</span>:
+          - <span class="c-k">weight</span>: <span class="c-n">100</span>
+            <span class="c-k">podAffinityTerm</span>:
+              <span class="c-k">labelSelector</span>: { <span class="c-k">matchLabels</span>: { <span class="c-k">app</span>: <span class="c-s">payment-api</span> } }
+              <span class="c-k">topologyKey</span>: <span class="c-s">kubernetes.io/hostname</span>
+
+      <span class="c-c"># ---- pod-level security: applies to all containers ----</span>
+      <span class="c-k">securityContext</span>:
+        <span class="c-k">runAsNonRoot</span>: <span class="c-s">true</span>
+        <span class="c-k">runAsUser</span>: <span class="c-n">10001</span>
+        <span class="c-k">fsGroup</span>: <span class="c-n">10001</span>
+        <span class="c-k">seccompProfile</span>: { <span class="c-k">type</span>: <span class="c-s">RuntimeDefault</span> }
+
+      <span class="c-c"># ---- init container: runs to completion BEFORE the app ----</span>
+      <span class="c-k">initContainers</span>:
+      - <span class="c-k">name</span>: <span class="c-s">wait-for-db</span>
+        <span class="c-k">image</span>: <span class="c-s">busybox:1.36</span>
+        <span class="c-k">command</span>: [<span class="c-s">"sh"</span>,<span class="c-s">"-c"</span>,<span class="c-s">"until nc -z $DB_HOST 5432; do echo waiting; sleep 2; done"</span>]
+        <span class="c-k">env</span>:
+        - <span class="c-k">name</span>: <span class="c-s">DB_HOST</span>
+          <span class="c-k">valueFrom</span>: { <span class="c-k">configMapKeyRef</span>: { <span class="c-k">name</span>: <span class="c-s">payment-api-config</span>, <span class="c-k">key</span>: <span class="c-s">DB_HOST</span> } }
+
+      <span class="c-k">containers</span>:
+      - <span class="c-k">name</span>: <span class="c-s">payment-api</span>
+        <span class="c-k">image</span>: <span class="c-s">registry.tmo.example/payments/payment-api:1.4.2</span>  <span class="c-c"># pinned, never :latest</span>
+        <span class="c-k">imagePullPolicy</span>: <span class="c-s">IfNotPresent</span>
+        <span class="c-k">ports</span>:
+        - <span class="c-k">name</span>: <span class="c-s">http</span>
+          <span class="c-k">containerPort</span>: <span class="c-n">8080</span>
+
+        <span class="c-c"># ---- config in: env from ConfigMap + Secret ----</span>
+        <span class="c-k">envFrom</span>:
+        - <span class="c-k">configMapRef</span>: { <span class="c-k">name</span>: <span class="c-s">payment-api-config</span> }
+        - <span class="c-k">secretRef</span>:    { <span class="c-k">name</span>: <span class="c-s">payment-api-secrets</span> }
+        <span class="c-k">env</span>:
+        - <span class="c-k">name</span>: <span class="c-s">POD_NAME</span>                       <span class="c-c"># downward API: pod tells app who it is</span>
+          <span class="c-k">valueFrom</span>: { <span class="c-k">fieldRef</span>: { <span class="c-k">fieldPath</span>: <span class="c-s">metadata.name</span> } }
+        - <span class="c-k">name</span>: <span class="c-s">NODE_NAME</span>
+          <span class="c-k">valueFrom</span>: { <span class="c-k">fieldRef</span>: { <span class="c-k">fieldPath</span>: <span class="c-s">spec.nodeName</span> } }
+
+        <span class="c-c"># ---- resources: THE most important 6 lines for stability ----</span>
+        <span class="c-k">resources</span>:
+          <span class="c-k">requests</span>:            <span class="c-c"># scheduler reserves this much (bin packing)</span>
+            <span class="c-k">cpu</span>: <span class="c-s">"1"</span>
+            <span class="c-k">memory</span>: <span class="c-s">1Gi</span>
+          <span class="c-k">limits</span>:               <span class="c-c"># cgroup hard caps</span>
+            <span class="c-k">memory</span>: <span class="c-s">1Gi</span>        <span class="c-c"># limit == request → predictable, no OOM surprises</span>
+                                <span class="c-c"># NOTE: no cpu limit → avoids CFS throttling latency;</span>
+                                <span class="c-c"># many latency-sensitive teams do exactly this</span>
+
+        <span class="c-c"># ---- the three probes ----</span>
+        <span class="c-k">startupProbe</span>:           <span class="c-c"># protects slow JVM boot from liveness kills</span>
+          <span class="c-k">httpGet</span>: { <span class="c-k">path</span>: <span class="c-s">/actuator/health/liveness</span>, <span class="c-k">port</span>: <span class="c-s">http</span> }
+          <span class="c-k">failureThreshold</span>: <span class="c-n">30</span>
+          <span class="c-k">periodSeconds</span>: <span class="c-n">2</span>    <span class="c-c"># up to 60s allowed to start</span>
+        <span class="c-k">readinessProbe</span>:         <span class="c-c"># gate for traffic; fail = removed from LB, NOT restarted</span>
+          <span class="c-k">httpGet</span>: { <span class="c-k">path</span>: <span class="c-s">/actuator/health/readiness</span>, <span class="c-k">port</span>: <span class="c-s">http</span> }
+          <span class="c-k">periodSeconds</span>: <span class="c-n">5</span>
+          <span class="c-k">failureThreshold</span>: <span class="c-n">2</span>
+        <span class="c-k">livenessProbe</span>:          <span class="c-c"># deadlock detector; fail = container restarted</span>
+          <span class="c-k">httpGet</span>: { <span class="c-k">path</span>: <span class="c-s">/actuator/health/liveness</span>, <span class="c-k">port</span>: <span class="c-s">http</span> }
+          <span class="c-k">periodSeconds</span>: <span class="c-n">10</span>
+          <span class="c-k">failureThreshold</span>: <span class="c-n">3</span>  <span class="c-c"># be forgiving; liveness restarts cause cascades</span>
+
+        <span class="c-c"># ---- graceful shutdown (see timeline above) ----</span>
+        <span class="c-k">lifecycle</span>:
+          <span class="c-k">preStop</span>:
+            <span class="c-k">exec</span>: { <span class="c-k">command</span>: [<span class="c-s">"sh"</span>,<span class="c-s">"-c"</span>,<span class="c-s">"sleep 8"</span>] }
+
+        <span class="c-c"># ---- container-level hardening ----</span>
+        <span class="c-k">securityContext</span>:
+          <span class="c-k">allowPrivilegeEscalation</span>: <span class="c-s">false</span>
+          <span class="c-k">readOnlyRootFilesystem</span>: <span class="c-s">true</span>
+          <span class="c-k">capabilities</span>: { <span class="c-k">drop</span>: [<span class="c-s">"ALL"</span>] }
+
+        <span class="c-k">volumeMounts</span>:
+        - <span class="c-k">name</span>: <span class="c-s">app-config</span>
+          <span class="c-k">mountPath</span>: <span class="c-s">/app/config</span>
+          <span class="c-k">readOnly</span>: <span class="c-s">true</span>
+        - <span class="c-k">name</span>: <span class="c-s">tmp</span>                <span class="c-c"># app needs SOME writable dir with RO rootfs</span>
+          <span class="c-k">mountPath</span>: <span class="c-s">/tmp</span>
+
+      <span class="c-k">volumes</span>:
+      - <span class="c-k">name</span>: <span class="c-s">app-config</span>
+        <span class="c-k">configMap</span>: { <span class="c-k">name</span>: <span class="c-s">payment-api-config</span>, <span class="c-k">items</span>: [{ <span class="c-k">key</span>: <span class="c-s">application.yaml</span>, <span class="c-k">path</span>: <span class="c-s">application.yaml</span> }] }
+      - <span class="c-k">name</span>: <span class="c-s">tmp</span>
+        <span class="c-k">emptyDir</span>: {}</code></pre>
+
+<div class="key"><div class="q">Three fields people get wrong in interviews</div>
+<ul>
+<li><b>Readiness vs liveness:</b> readiness failure = "stop sending me traffic" (pod stays alive — perfect for "my DB is briefly down"). Liveness failure = "restart me" (only for truly stuck processes). Wiring DB health into liveness turns a DB blip into a restart storm.</li>
+<li><b>Requests vs limits:</b> requests are for the <i>scheduler</i> (reservation and bin-packing); limits are for the <i>kernel</i> (cgroup caps). Memory over limit = OOMKill (exit 137). CPU over limit = throttled, which shows up as mysterious p99 latency.</li>
+<li><b>maxUnavailable: 0</b> + PDB below = capacity never dips during deploys or node drains.</li>
+</ul></div>
+
+<h3>6 · Service — a stable virtual IP over churning pods</h3>
+<div class="why"><div class="q">Why a Service at all?</div><p>Pods die and are reborn with new IPs constantly. Callers need one stable address. A Service is a <b>virtual IP that no machine owns</b> — kube-proxy programs every node's kernel so packets to that IP get rewritten (DNAT) to a live pod picked from the EndpointSlice. It's routing-by-configuration, not a physical box.</p></div>
+<pre><span class="fn">40-service.yaml</span><code><span class="c-k">apiVersion</span>: <span class="c-s">v1</span>
+<span class="c-k">kind</span>: <span class="c-s">Service</span>
+<span class="c-k">metadata</span>:
+  <span class="c-k">name</span>: <span class="c-s">payment-api</span>
+  <span class="c-k">namespace</span>: <span class="c-s">payments</span>
+  <span class="c-k">labels</span>: { <span class="c-k">app</span>: <span class="c-s">payment-api</span> }
+<span class="c-k">spec</span>:
+  <span class="c-k">type</span>: <span class="c-s">ClusterIP</span>            <span class="c-c"># internal-only; Ingress/mesh will expose it</span>
+  <span class="c-k">selector</span>: { <span class="c-k">app</span>: <span class="c-s">payment-api</span> }   <span class="c-c"># pods with this label = backends</span>
+  <span class="c-k">ports</span>:
+  - <span class="c-k">name</span>: <span class="c-s">http</span>               <span class="c-c"># NAMED port: Istio uses names for protocol detection</span>
+    <span class="c-k">port</span>: <span class="c-n">80</span>                 <span class="c-c"># what callers dial</span>
+    <span class="c-k">targetPort</span>: <span class="c-s">http</span>         <span class="c-c"># the container port name</span>
+    <span class="c-k">protocol</span>: <span class="c-s">TCP</span></code></pre>
+<table>
+<tr><th>Service type</th><th>What it does</th><th>When</th></tr>
+<tr><td><b>ClusterIP</b></td><td>Virtual IP inside the cluster only</td><td>Default. 95% of services.</td></tr>
+<tr><td><b>NodePort</b></td><td>Opens the same high port (30000–32767) on EVERY node</td><td>Building block under LoadBalancer; rarely used alone.</td></tr>
+<tr><td><b>LoadBalancer</b></td><td>Asks the cloud for a real external L4 LB → NodePort → pods</td><td>Exposing an ingress gateway to the internet.</td></tr>
+<tr><td><b>Headless (clusterIP: None)</b></td><td>DNS returns pod IPs directly, no VIP</td><td>StatefulSets: databases, Kafka — clients that must address individual members.</td></tr>
+<tr><td><b>ExternalName</b></td><td>DNS CNAME to an outside name</td><td>Aliasing external services.</td></tr>
+</table>
+
+<h3>7 · HorizontalPodAutoscaler — the elastic waistband</h3>
+<pre><span class="fn">50-hpa.yaml</span><code><span class="c-k">apiVersion</span>: <span class="c-s">autoscaling/v2</span>
+<span class="c-k">kind</span>: <span class="c-s">HorizontalPodAutoscaler</span>
+<span class="c-k">metadata</span>:
+  <span class="c-k">name</span>: <span class="c-s">payment-api</span>
+  <span class="c-k">namespace</span>: <span class="c-s">payments</span>
+<span class="c-k">spec</span>:
+  <span class="c-k">scaleTargetRef</span>:
+    <span class="c-k">apiVersion</span>: <span class="c-s">apps/v1</span>
+    <span class="c-k">kind</span>: <span class="c-s">Deployment</span>
+    <span class="c-k">name</span>: <span class="c-s">payment-api</span>
+  <span class="c-k">minReplicas</span>: <span class="c-n">6</span>
+  <span class="c-k">maxReplicas</span>: <span class="c-n">120</span>
+  <span class="c-k">metrics</span>:
+  - <span class="c-k">type</span>: <span class="c-s">Resource</span>
+    <span class="c-k">resource</span>:
+      <span class="c-k">name</span>: <span class="c-s">cpu</span>
+      <span class="c-k">target</span>: { <span class="c-k">type</span>: <span class="c-s">Utilization</span>, <span class="c-k">averageUtilization</span>: <span class="c-n">60</span> }  <span class="c-c"># % of REQUESTS</span>
+  - <span class="c-k">type</span>: <span class="c-s">Pods</span>                <span class="c-c"># custom metric via Prometheus Adapter:</span>
+    <span class="c-k">pods</span>:                     <span class="c-c"># scale on real load, not just CPU</span>
+      <span class="c-k">metric</span>: { <span class="c-k">name</span>: <span class="c-s">http_requests_per_second</span> }
+      <span class="c-k">target</span>: { <span class="c-k">type</span>: <span class="c-s">AverageValue</span>, <span class="c-k">averageValue</span>: <span class="c-s">"800"</span> }
+  <span class="c-k">behavior</span>:
+    <span class="c-k">scaleUp</span>:
+      <span class="c-k">stabilizationWindowSeconds</span>: <span class="c-n">0</span>     <span class="c-c"># react instantly to spikes</span>
+      <span class="c-k">policies</span>: [{ <span class="c-k">type</span>: <span class="c-s">Percent</span>, <span class="c-k">value</span>: <span class="c-n">100</span>, <span class="c-k">periodSeconds</span>: <span class="c-n">30</span> }]  <span class="c-c"># may double / 30s</span>
+    <span class="c-k">scaleDown</span>:
+      <span class="c-k">stabilizationWindowSeconds</span>: <span class="c-n">300</span>   <span class="c-c"># cool down slowly — avoid flapping</span></code></pre>
+
+<h3>8 · PodDisruptionBudget — armor against "helpful" maintenance</h3>
+<div class="why"><div class="q">Why?</div><p>Node upgrades drain nodes: pods get evicted. Without a PDB, an upgrade wave could evict 5 of your 6 replicas at the same moment. A PDB tells the eviction API: "never take me below N healthy" — drains then proceed one pod at a time.</p></div>
+<pre><span class="fn">51-pdb.yaml</span><code><span class="c-k">apiVersion</span>: <span class="c-s">policy/v1</span>
+<span class="c-k">kind</span>: <span class="c-s">PodDisruptionBudget</span>
+<span class="c-k">metadata</span>:
+  <span class="c-k">name</span>: <span class="c-s">payment-api-pdb</span>
+  <span class="c-k">namespace</span>: <span class="c-s">payments</span>
+<span class="c-k">spec</span>:
+  <span class="c-k">minAvailable</span>: <span class="c-s">80%</span>
+  <span class="c-k">selector</span>: { <span class="c-k">matchLabels</span>: { <span class="c-k">app</span>: <span class="c-s">payment-api</span> } }</code></pre>
+
+<h3>9 · NetworkPolicy — firewalls between pods</h3>
+<div class="why"><div class="q">Why? Isn't the cluster private?</div><p>By default <b>every pod can talk to every pod</b>. If an attacker pops one pod (say, a vulnerable image in a forgotten namespace), they can reach your database. NetworkPolicies flip the model to default-deny: only declared paths exist. This is L3/L4 zero-trust; Istio mTLS (later) adds identity at L7.</p></div>
+<pre><span class="fn">60-networkpolicy.yaml</span><code><span class="c-c"># 1) default deny everything in the namespace</span>
+<span class="c-k">apiVersion</span>: <span class="c-s">networking.k8s.io/v1</span>
+<span class="c-k">kind</span>: <span class="c-s">NetworkPolicy</span>
+<span class="c-k">metadata</span>: { <span class="c-k">name</span>: <span class="c-s">default-deny</span>, <span class="c-k">namespace</span>: <span class="c-s">payments</span> }
+<span class="c-k">spec</span>:
+  <span class="c-k">podSelector</span>: {}              <span class="c-c"># all pods here</span>
+  <span class="c-k">policyTypes</span>: [<span class="c-s">Ingress</span>, <span class="c-s">Egress</span>]
+---
+<span class="c-c"># 2) allow only: gateway → payment-api, payment-api → db + dns</span>
+<span class="c-k">apiVersion</span>: <span class="c-s">networking.k8s.io/v1</span>
+<span class="c-k">kind</span>: <span class="c-s">NetworkPolicy</span>
+<span class="c-k">metadata</span>: { <span class="c-k">name</span>: <span class="c-s">payment-api-allow</span>, <span class="c-k">namespace</span>: <span class="c-s">payments</span> }
+<span class="c-k">spec</span>:
+  <span class="c-k">podSelector</span>: { <span class="c-k">matchLabels</span>: { <span class="c-k">app</span>: <span class="c-s">payment-api</span> } }
+  <span class="c-k">policyTypes</span>: [<span class="c-s">Ingress</span>, <span class="c-s">Egress</span>]
+  <span class="c-k">ingress</span>:
+  - <span class="c-k">from</span>:
+    - <span class="c-k">namespaceSelector</span>: { <span class="c-k">matchLabels</span>: { <span class="c-k">kubernetes.io/metadata.name</span>: <span class="c-s">istio-ingress</span> } }
+    <span class="c-k">ports</span>: [{ <span class="c-k">port</span>: <span class="c-n">8080</span>, <span class="c-k">protocol</span>: <span class="c-s">TCP</span> }]
+  <span class="c-k">egress</span>:
+  - <span class="c-k">to</span>: [{ <span class="c-k">podSelector</span>: { <span class="c-k">matchLabels</span>: { <span class="c-k">app</span>: <span class="c-s">payments-db</span> } } }]
+    <span class="c-k">ports</span>: [{ <span class="c-k">port</span>: <span class="c-n">5432</span>, <span class="c-k">protocol</span>: <span class="c-s">TCP</span> }]
+  - <span class="c-k">to</span>: [{ <span class="c-k">namespaceSelector</span>: {}, <span class="c-k">podSelector</span>: { <span class="c-k">matchLabels</span>: { <span class="c-k">k8s-app</span>: <span class="c-s">kube-dns</span> } } }]
+    <span class="c-k">ports</span>: [{ <span class="c-k">port</span>: <span class="c-n">53</span>, <span class="c-k">protocol</span>: <span class="c-s">UDP</span> }, { <span class="c-k">port</span>: <span class="c-n">53</span>, <span class="c-k">protocol</span>: <span class="c-s">TCP</span> }]  <span class="c-c"># never forget DNS!</span></code></pre>
+
+<details><summary>The other workload kinds: StatefulSet, DaemonSet, Job, CronJob (full YAML)</summary><div class="inner">
+<h4>StatefulSet — for things with a name and a disk</h4>
+<p>Deployments treat pods as identical cattle. Databases need stable identity: <code>payments-db-0</code> is always the leader, keeps <i>its own</i> disk across restarts, and members start in order. That's a StatefulSet + headless Service + volumeClaimTemplates.</p>
+<pre><code><span class="c-k">apiVersion</span>: <span class="c-s">apps/v1</span>
+<span class="c-k">kind</span>: <span class="c-s">StatefulSet</span>
+<span class="c-k">metadata</span>: { <span class="c-k">name</span>: <span class="c-s">payments-db</span>, <span class="c-k">namespace</span>: <span class="c-s">payments</span> }
+<span class="c-k">spec</span>:
+  <span class="c-k">serviceName</span>: <span class="c-s">payments-db-headless</span>   <span class="c-c"># gives payments-db-0.payments-db-headless DNS</span>
+  <span class="c-k">replicas</span>: <span class="c-n">3</span>
+  <span class="c-k">selector</span>: { <span class="c-k">matchLabels</span>: { <span class="c-k">app</span>: <span class="c-s">payments-db</span> } }
+  <span class="c-k">template</span>:
+    <span class="c-k">metadata</span>: { <span class="c-k">labels</span>: { <span class="c-k">app</span>: <span class="c-s">payments-db</span> } }
+    <span class="c-k">spec</span>:
+      <span class="c-k">containers</span>:
+      - <span class="c-k">name</span>: <span class="c-s">postgres</span>
+        <span class="c-k">image</span>: <span class="c-s">postgres:16</span>
+        <span class="c-k">ports</span>: [{ <span class="c-k">containerPort</span>: <span class="c-n">5432</span>, <span class="c-k">name</span>: <span class="c-s">pg</span> }]
+        <span class="c-k">volumeMounts</span>: [{ <span class="c-k">name</span>: <span class="c-s">data</span>, <span class="c-k">mountPath</span>: <span class="c-s">/var/lib/postgresql/data</span> }]
+  <span class="c-k">volumeClaimTemplates</span>:               <span class="c-c"># EACH replica gets ITS OWN PersistentVolume</span>
+  - <span class="c-k">metadata</span>: { <span class="c-k">name</span>: <span class="c-s">data</span> }
+    <span class="c-k">spec</span>:
+      <span class="c-k">accessModes</span>: [<span class="c-s">ReadWriteOnce</span>]
+      <span class="c-k">storageClassName</span>: <span class="c-s">fast-ssd</span>
+      <span class="c-k">resources</span>: { <span class="c-k">requests</span>: { <span class="c-k">storage</span>: <span class="c-s">200Gi</span> } }
+---
+<span class="c-k">apiVersion</span>: <span class="c-s">v1</span>
+<span class="c-k">kind</span>: <span class="c-s">Service</span>
+<span class="c-k">metadata</span>: { <span class="c-k">name</span>: <span class="c-s">payments-db-headless</span>, <span class="c-k">namespace</span>: <span class="c-s">payments</span> }
+<span class="c-k">spec</span>:
+  <span class="c-k">clusterIP</span>: <span class="c-s">None</span>                     <span class="c-c"># headless: DNS → pod IPs directly</span>
+  <span class="c-k">selector</span>: { <span class="c-k">app</span>: <span class="c-s">payments-db</span> }
+  <span class="c-k">ports</span>: [{ <span class="c-k">port</span>: <span class="c-n">5432</span>, <span class="c-k">name</span>: <span class="c-s">pg</span> }]</code></pre>
+<h4>DaemonSet — exactly one per node</h4>
+<p>For node-scoped agents: log shippers, node exporters, CNI. Add a node → the pod appears automatically.</p>
+<pre><code><span class="c-k">apiVersion</span>: <span class="c-s">apps/v1</span>
+<span class="c-k">kind</span>: <span class="c-s">DaemonSet</span>
+<span class="c-k">metadata</span>: { <span class="c-k">name</span>: <span class="c-s">node-exporter</span>, <span class="c-k">namespace</span>: <span class="c-s">monitoring</span> }
+<span class="c-k">spec</span>:
+  <span class="c-k">selector</span>: { <span class="c-k">matchLabels</span>: { <span class="c-k">app</span>: <span class="c-s">node-exporter</span> } }
+  <span class="c-k">template</span>:
+    <span class="c-k">metadata</span>: { <span class="c-k">labels</span>: { <span class="c-k">app</span>: <span class="c-s">node-exporter</span> } }
+    <span class="c-k">spec</span>:
+      <span class="c-k">tolerations</span>: [{ <span class="c-k">operator</span>: <span class="c-s">Exists</span> }]   <span class="c-c"># run even on tainted nodes</span>
+      <span class="c-k">hostNetwork</span>: <span class="c-s">true</span>                       <span class="c-c"># see the real node network</span>
+      <span class="c-k">containers</span>:
+      - <span class="c-k">name</span>: <span class="c-s">node-exporter</span>
+        <span class="c-k">image</span>: <span class="c-s">prom/node-exporter:v1.8.1</span>
+        <span class="c-k">ports</span>: [{ <span class="c-k">containerPort</span>: <span class="c-n">9100</span> }]</code></pre>
+<h4>Job & CronJob — run to completion</h4>
+<pre><code><span class="c-k">apiVersion</span>: <span class="c-s">batch/v1</span>
+<span class="c-k">kind</span>: <span class="c-s">CronJob</span>
+<span class="c-k">metadata</span>: { <span class="c-k">name</span>: <span class="c-s">settlement-report</span>, <span class="c-k">namespace</span>: <span class="c-s">payments</span> }
+<span class="c-k">spec</span>:
+  <span class="c-k">schedule</span>: <span class="c-s">"0 2 * * *"</span>              <span class="c-c"># 2 AM daily</span>
+  <span class="c-k">concurrencyPolicy</span>: <span class="c-s">Forbid</span>          <span class="c-c"># never overlap runs</span>
+  <span class="c-k">jobTemplate</span>:
+    <span class="c-k">spec</span>:
+      <span class="c-k">backoffLimit</span>: <span class="c-n">3</span>                 <span class="c-c"># retry failed pods 3×</span>
+      <span class="c-k">activeDeadlineSeconds</span>: <span class="c-n">3600</span>     <span class="c-c"># kill if running &gt; 1h</span>
+      <span class="c-k">template</span>:
+        <span class="c-k">spec</span>:
+          <span class="c-k">restartPolicy</span>: <span class="c-s">Never</span>
+          <span class="c-k">containers</span>:
+          - <span class="c-k">name</span>: <span class="c-s">report</span>
+            <span class="c-k">image</span>: <span class="c-s">registry.tmo.example/payments/settlement:2.1.0</span>
+            <span class="c-k">args</span>: [<span class="c-s">"--date=yesterday"</span>]</code></pre>
+</div></details>
+</section>
+
+<!-- ============ 20,000 FT : BILLION REQUESTS ============ -->
+<section class="alt" id="s6" data-alt="20000">
+<div class="eyebrow">ALTITUDE 06<span class="ft">20,000 FT</span></div>
+<h2>1,000,000,000 requests — and answering in sub-millisecond time</h2>
+
+<p class="lead">First, kill the fear with arithmetic. A billion requests <b>per day</b> is:</p>
+<div class="grid3">
+<div class="tile"><h5>Average</h5><p style="font-size:24px;color:var(--ink)">~11,600 <span style="font-size:13px;color:var(--dim)">req/s</span></p><p>1e9 ÷ 86,400 s</p></div>
+<div class="tile"><h5>Peak (≈3× average)</h5><p style="font-size:24px;color:var(--amber)">~35,000 <span style="font-size:13px;color:var(--dim)">req/s</span></p><p>design target</p></div>
+<div class="tile"><h5>Pods needed</h5><p style="font-size:24px;color:var(--green)">~90 <span style="font-size:13px;color:var(--dim)">pods</span></p><p>at 500 req/s per pod, +20% headroom, spread over 3 regions</p></div>
+</div>
+<p>Ninety pods is a Tuesday for Kubernetes. <b>The hard part is never the count — it's the latency budget and the failure math.</b> Now the honest physics:</p>
+
+<div class="key"><div class="q">What "sub-millisecond" really means</div>
+<p>No response crosses the internet in under 1 ms — user→edge alone is 5–30 ms of pure light-speed cost. When engineers say "we respond in sub-ms," they mean one of two truthful things:<br>
+<b>(1) Server-side budget:</b> time from the request entering our building to the response leaving it is &lt;1 ms — every internal hop measured in microseconds.<br>
+<b>(2) Cache-hit at the edge:</b> the answer was precomputed and sits in memory at a location near the user, so <i>our</i> added latency ≈ 0.<br>
+Both require the same discipline: few hops, no disk, no cross-zone chatter, everything hot in RAM.</p></div>
+
+<h3>The server-side microsecond budget (where 1 ms actually goes)</h3>
+<div class="budget">
+  <div style="flex:8;background:var(--blue)">L4 LB 20µs</div>
+  <div style="flex:14;background:var(--cyan)">Envoy gateway 60µs</div>
+  <div style="flex:10;background:var(--violet)">sidecar 40µs</div>
+  <div style="flex:38;background:var(--green)">app logic 350µs</div>
+  <div style="flex:20;background:var(--amber)">Redis GET 200µs</div>
+  <div style="flex:10;background:var(--violet)">sidecar 40µs</div>
+  <div style="flex:8;background:var(--red)">serialize+out 90µs</div>
+</div>
+<div class="legend"><span><i style="background:var(--blue)"></i>network/LB</span><span><i style="background:var(--cyan)"></i>gateway</span><span><i style="background:var(--violet)"></i>mesh sidecars</span><span><i style="background:var(--green)"></i>your code</span><span><i style="background:var(--amber)"></i>cache</span><span><i style="background:var(--red)"></i>egress</span></div>
+<p>Total ≈ 800 µs. Notice what is <b>absent</b>: no relational DB on the hot path (a Postgres query is 1–10 ms by itself — it alone blows the budget), no cross-zone hop (+1–2 ms), no TLS full handshake (session resumption/TLS 1.3 0-RTT keep it off the steady state), no cold JIT. The budget is a list of things you're not allowed to do.</p>
+
+<h3>The full journey of one request (follow the packet)</h3>
+<div class="diagram">
+<svg viewBox="0 0 880 560">
+  <!-- user -->
+  <rect class="box" x="30" y="30" width="150" height="56"/>
+  <text class="lbl" x="105" y="53" text-anchor="middle">📱 USER</text>
+  <text class="sub" x="105" y="73" text-anchor="middle">pay.tmo.example</text>
+  <!-- dns -->
+  <rect class="box" x="240" y="30" width="180" height="56"/>
+  <text class="lbl" x="330" y="53" text-anchor="middle">DNS / GSLB</text>
+  <text class="sub" x="330" y="73" text-anchor="middle">returns anycast VIP</text>
+  <!-- anycast -->
+  <rect class="box" x="480" y="30" width="180" height="56" style="stroke:var(--amber)"/>
+  <text class="lbl" x="570" y="53" text-anchor="middle" fill="var(--amber)">ANYCAST + BGP</text>
+  <text class="sub" x="570" y="73" text-anchor="middle">same IP, many cities</text>
+  <!-- edge -->
+  <rect class="box" x="700" y="30" width="150" height="56"/>
+  <text class="lbl" x="775" y="53" text-anchor="middle">EDGE POP</text>
+  <text class="sub" x="775" y="73" text-anchor="middle">TLS ends here; CDN cache</text>
+
+  <!-- region box -->
+  <rect x="30" y="130" width="820" height="400" rx="14" fill="none" stroke="var(--blue)" stroke-dasharray="6 5"/>
+  <text class="sub" x="50" y="154" fill="var(--blue)">NEAREST REGION — everything below stays inside the building</text>
+
+  <rect class="box" x="60" y="180" width="190" height="60"/>
+  <text class="lbl" x="155" y="203" text-anchor="middle">L4 NLB</text>
+  <text class="sub" x="155" y="223" text-anchor="middle">Service type LoadBalancer</text>
+
+  <rect class="box" x="310" y="180" width="230" height="60" style="stroke:var(--cyan)"/>
+  <text class="lbl" x="425" y="203" text-anchor="middle" fill="var(--cyan)">ISTIO INGRESS GATEWAY</text>
+  <text class="sub" x="425" y="223" text-anchor="middle">Envoy: route, authn JWT, mTLS out</text>
+
+  <rect class="box" x="600" y="180" width="220" height="60"/>
+  <text class="lbl" x="710" y="203" text-anchor="middle">payment-api pod</text>
+  <text class="sub" x="710" y="223" text-anchor="middle">sidecar Envoy → app :8080</text>
+
+  <rect class="box" x="600" y="300" width="220" height="56" style="stroke:var(--amber)"/>
+  <text class="lbl" x="710" y="323" text-anchor="middle" fill="var(--amber)">Redis (in-zone)</text>
+  <text class="sub" x="710" y="343" text-anchor="middle">hot data, ~200µs GET</text>
+
+  <rect class="box" x="310" y="300" width="230" height="56"/>
+  <text class="lbl" x="425" y="323" text-anchor="middle">fraud-svc pod</text>
+  <text class="sub" x="425" y="343" text-anchor="middle">called over mesh mTLS</text>
+
+  <rect class="box" x="60" y="300" width="190" height="56"/>
+  <text class="lbl" x="155" y="323" text-anchor="middle">Postgres (async)</text>
+  <text class="sub" x="155" y="343" text-anchor="middle">write-behind, off hot path</text>
+
+  <rect class="box" x="60" y="430" width="760" height="70" style="stroke:var(--green)"/>
+  <text class="lbl" x="440" y="457" text-anchor="middle" fill="var(--green)">TELEMETRY PLANE (passive)</text>
+  <text class="sub" x="440" y="478" text-anchor="middle">every hop above emits metrics + traces + logs — Prometheus / OTel / Grafana (next altitude)</text>
+
+  <!-- flows -->
+  <path class="wire-c" d="M180,58 L240,58"/><path class="wire-c" d="M420,58 L480,58"/><path class="wire-c" d="M660,58 L700,58"/>
+  <path class="wire-c" d="M775,86 C775,130 250,140 155,180"/>
+  <path class="wire-c" d="M250,210 L310,210"/>
+  <path class="wire-c" d="M540,210 L600,210"/>
+  <path class="wire-a" d="M710,240 L710,300"/>
+  <path class="wire-v" d="M600,225 C560,260 500,280 470,300"/>
+  <path class="wire" stroke-dasharray="4 4" d="M310,330 L250,330"/>
+
+  <circle r="5" fill="var(--cyan)" class="pkt" style="offset-path:path('M180,58 L240,58');animation-duration:1.1s"/>
+  <circle r="5" fill="var(--cyan)" class="pkt" style="offset-path:path('M420,58 L480,58');animation-duration:1.1s;animation-delay:.4s"/>
+  <circle r="5" fill="var(--cyan)" class="pkt" style="offset-path:path('M660,58 L700,58');animation-duration:1.1s;animation-delay:.8s"/>
+  <circle r="5" fill="var(--cyan)" class="pkt" style="offset-path:path('M775,86 C775,130 250,140 155,180');animation-duration:1.6s;animation-delay:1.2s"/>
+  <circle r="5" fill="var(--cyan)" class="pkt" style="offset-path:path('M250,210 L310,210');animation-duration:.9s;animation-delay:2.4s"/>
+  <circle r="5" fill="var(--cyan)" class="pkt" style="offset-path:path('M540,210 L600,210');animation-duration:.9s;animation-delay:2.9s"/>
+  <circle r="5" fill="var(--amber)" class="pkt" style="offset-path:path('M710,240 L710,300');animation-duration:.9s;animation-delay:3.5s"/>
+  <circle r="5" fill="var(--violet)" class="pkt" style="offset-path:path('M600,225 C560,260 500,280 470,300');animation-duration:1.2s;animation-delay:3.5s"/>
+</svg>
+<div class="cap">One request, end to end. Cyan = request path · amber = cache lookup · violet = mesh call to another service · dashed = async write, off the hot path.</div>
+</div>
+
+<h3>Why anycast? (the trick that shrinks the internet)</h3>
+<div class="why"><div class="q">Why does the same IP exist in 50 cities?</div>
+<p>With <b>anycast</b>, we announce the identical IP prefix via BGP from every edge location. Internet routers naturally forward each user's packets to the topologically nearest announcement — Seattle users land in Seattle, Mumbai users in Mumbai — with zero logic on our side and instant failover: if the Seattle POP withdraws its BGP route (or dies), routers converge to the next-closest within seconds. This is how DNS root servers and every serious CDN work.</p></div>
+
+<h3>Layered load balancing — each layer answers a different question</h3>
+<table>
+<tr><th>Layer</th><th>Who</th><th>Question it answers</th><th>Sees</th></tr>
+<tr><td>Global</td><td>GSLB / anycast</td><td><b>Which region?</b></td><td>BGP topology, region health</td></tr>
+<tr><td>L4</td><td>Cloud NLB / IPVS / Maglev</td><td><b>Which node?</b> (flow-hash 5-tuple → consistent backend)</td><td>IPs + ports only — that's why it's ~20 µs</td></tr>
+<tr><td>L7 edge</td><td>Envoy / Nginx ingress</td><td><b>Which service &amp; version?</b> (host, path, headers)</td><td>Full HTTP after TLS termination</td></tr>
+<tr><td>L7 mesh</td><td>Envoy sidecars</td><td><b>Which pod?</b> (least-request, zone-local, outlier ejection)</td><td>HTTP + mTLS identity per hop</td></tr>
+</table>
+
+<div class="warn"><div class="q">The three silent latency killers at this scale</div>
+<ul>
+<li><b>Conntrack/SNAT exhaustion:</b> at 35k req/s, connection tracking tables and ephemeral ports run out. Fixes: HTTP/2 multiplexing (one TCP conn, many streams — Envoy does this pod-to-pod automatically), keep-alives everywhere, and eBPF dataplane (Cilium) to bypass iptables' O(n) rule chains.</li>
+<li><b>Cross-zone hops:</b> mesh <i>locality-aware routing</i> keeps calls in-zone (0.1 ms) instead of cross-zone (1–2 ms). One setting, 10× hop latency difference.</li>
+<li><b>CPU throttling:</b> CFS-quota throttling from CPU limits shows up as p99 spikes with low average CPU. Either drop CPU limits or use static CPU manager policy for pinned cores.</li>
+</ul></div>
+
+<div class="analogy"><div class="q">Analogy — The airport</div>
+<p>GSLB/anycast = "fly to the nearest airport." L4 NLB = the terminal signs sending you to a security lane (fast, doesn't read your ticket details). L7 gateway = the gate agent who reads your ticket (host/path) and points you to the exact gate. Sidecars = the jet bridge that connects to precisely one plane (pod) and checks crew ID (mTLS) both ways.</p></div>
+</section>
+
+<!-- ============ 10,000 FT : ISTIO / ENVOY / NGINX ============ -->
+<section class="alt" id="s7" data-alt="10000">
+<div class="eyebrow">ALTITUDE 07<span class="ft">10,000 FT</span></div>
+<h2>Istio, Envoy, Nginx — the traffic layer, demystified</h2>
+
+<div class="why"><div class="q">Why a service mesh at all?</div>
+<p>Every service needs the same non-business features: retries, timeouts, mTLS, metrics, circuit breaking, canary routing. Before meshes, each team re-implemented these in their own language libraries — inconsistently, and every fix meant redeploying every app. A mesh moves all of it into a proxy that sits <b>next to</b> each app (the sidecar). Now the platform team upgrades traffic policy for 500 services by changing configuration, not code.</p></div>
+
+<div class="grid3">
+<div class="tile"><h5>Envoy</h5><p>The <b>proxy</b> (C++, built at Lyft). Does the actual data-plane work: routing, LB, TLS, retries, telemetry. Configured live over the xDS API — no restarts.</p></div>
+<div class="tile"><h5>Istio</h5><p>The <b>control plane</b> (istiod). Reads your YAML (VirtualService, etc.), watches K8s services/endpoints, compiles everything to Envoy xDS config, and runs the CA that issues workload certificates.</p></div>
+<div class="tile"><h5>Nginx</h5><p>A classic web server/reverse proxy, also usable as a K8s Ingress controller. Rock-solid, config-file driven; less dynamic than Envoy (traditionally reloads config rather than streaming updates). Common as a simpler edge when you don't need a mesh.</p></div>
+</div>
+
+<div class="diagram">
+<svg viewBox="0 0 880 330">
+  <rect class="box" x="290" y="20" width="300" height="64" style="stroke:var(--violet)"/>
+  <text class="lbl" x="440" y="45" text-anchor="middle" fill="var(--violet)">istiod (control plane)</text>
+  <text class="sub" x="440" y="66" text-anchor="middle">watches K8s + your YAML → compiles xDS → CA</text>
+
+  <g>
+    <rect x="60" y="140" width="330" height="150" rx="12" fill="none" stroke="var(--line)"/>
+    <text class="sub" x="75" y="162">POD payment-api</text>
+    <rect class="box" x="80" y="175" width="130" height="90" style="stroke:var(--cyan)"/>
+    <text class="lbl" x="145" y="205" text-anchor="middle" fill="var(--cyan)">envoy</text>
+    <text class="sub" x="145" y="225" text-anchor="middle">sidecar</text>
+    <text class="tiny" x="145" y="245" text-anchor="middle">iptables grabs all traffic</text>
+    <rect class="box" x="235" y="175" width="130" height="90"/>
+    <text class="lbl" x="300" y="210" text-anchor="middle">app :8080</text>
+    <text class="sub" x="300" y="230" text-anchor="middle">plain HTTP inside</text>
+    <path class="wire" d="M210,220 L235,220"/>
+  </g>
+  <g>
+    <rect x="490" y="140" width="330" height="150" rx="12" fill="none" stroke="var(--line)"/>
+    <text class="sub" x="505" y="162">POD fraud-svc</text>
+    <rect class="box" x="510" y="175" width="130" height="90" style="stroke:var(--cyan)"/>
+    <text class="lbl" x="575" y="205" text-anchor="middle" fill="var(--cyan)">envoy</text>
+    <text class="sub" x="575" y="225" text-anchor="middle">sidecar</text>
+    <rect class="box" x="665" y="175" width="130" height="90"/>
+    <text class="lbl" x="730" y="210" text-anchor="middle">app :9000</text>
+    <path class="wire" d="M640,220 L665,220"/>
+  </g>
+  <path class="wire-g" d="M210,220 C300,310 580,310 510,230"/>
+  <text class="tiny" x="430" y="322" text-anchor="middle" fill="var(--green)">mTLS tunnel between sidecars — apps never know</text>
+  <circle r="5" fill="var(--green)" class="pkt" style="offset-path:path('M210,220 C300,310 580,310 510,230');animation-duration:2.2s"/>
+  <path class="wire-v" d="M360,84 L145,175"/><path class="wire-v" d="M520,84 L575,175"/>
+  <circle r="4" fill="var(--violet)" class="pkt" style="offset-path:path('M360,84 L145,175');animation-delay:.5s"/>
+  <circle r="4" fill="var(--violet)" class="pkt" style="offset-path:path('M520,84 L575,175');animation-delay:1.3s"/>
+  <text class="tiny" x="440" y="110" text-anchor="middle" fill="var(--violet)">xDS config + certificates pushed live</text>
+</svg>
+<div class="cap">Sidecar pattern: iptables (set up by istio-init) redirects all pod traffic through Envoy. Green = encrypted service-to-service; violet = control plane pushing config/certs.</div>
+</div>
+
+<h3>Istio YAML: gateway, routing, resilience — complete set</h3>
+<pre><span class="fn">70-istio-gateway.yaml</span><code><span class="c-c"># Gateway: which ports/hosts the ingress Envoy listens on (L4–L6)</span>
+<span class="c-k">apiVersion</span>: <span class="c-s">networking.istio.io/v1</span>
+<span class="c-k">kind</span>: <span class="c-s">Gateway</span>
+<span class="c-k">metadata</span>: { <span class="c-k">name</span>: <span class="c-s">payments-gw</span>, <span class="c-k">namespace</span>: <span class="c-s">payments</span> }
+<span class="c-k">spec</span>:
+  <span class="c-k">selector</span>: { <span class="c-k">istio</span>: <span class="c-s">ingressgateway</span> }   <span class="c-c"># which gateway pods implement this</span>
+  <span class="c-k">servers</span>:
+  - <span class="c-k">port</span>: { <span class="c-k">number</span>: <span class="c-n">443</span>, <span class="c-k">name</span>: <span class="c-s">https</span>, <span class="c-k">protocol</span>: <span class="c-s">HTTPS</span> }
+    <span class="c-k">hosts</span>: [<span class="c-s">"pay.tmo.example"</span>]
+    <span class="c-k">tls</span>:
+      <span class="c-k">mode</span>: <span class="c-s">SIMPLE</span>
+      <span class="c-k">credentialName</span>: <span class="c-s">pay-tmo-example-tls</span>   <span class="c-c"># Secret from cert-manager (next altitude)</span>
+  - <span class="c-k">port</span>: { <span class="c-k">number</span>: <span class="c-n">80</span>, <span class="c-k">name</span>: <span class="c-s">http</span>, <span class="c-k">protocol</span>: <span class="c-s">HTTP</span> }
+    <span class="c-k">hosts</span>: [<span class="c-s">"pay.tmo.example"</span>]
+    <span class="c-k">tls</span>: { <span class="c-k">httpsRedirect</span>: <span class="c-s">true</span> }           <span class="c-c"># force HTTPS</span></code></pre>
+
+<pre><span class="fn">71-virtualservice.yaml</span><code><span class="c-c"># VirtualService: L7 routing rules — the "if this request, then where"</span>
+<span class="c-k">apiVersion</span>: <span class="c-s">networking.istio.io/v1</span>
+<span class="c-k">kind</span>: <span class="c-s">VirtualService</span>
+<span class="c-k">metadata</span>: { <span class="c-k">name</span>: <span class="c-s">payment-api-vs</span>, <span class="c-k">namespace</span>: <span class="c-s">payments</span> }
+<span class="c-k">spec</span>:
+  <span class="c-k">hosts</span>: [<span class="c-s">"pay.tmo.example"</span>]
+  <span class="c-k">gateways</span>: [<span class="c-s">payments-gw</span>]
+  <span class="c-k">http</span>:
+  - <span class="c-k">name</span>: <span class="c-s">canary-internal-testers</span>       <span class="c-c"># header-based canary first</span>
+    <span class="c-k">match</span>:
+    - <span class="c-k">headers</span>: { <span class="c-k">x-canary</span>: { <span class="c-k">exact</span>: <span class="c-s">"true"</span> } }
+    <span class="c-k">route</span>:
+    - <span class="c-k">destination</span>: { <span class="c-k">host</span>: <span class="c-s">payment-api.payments.svc.cluster.local</span>, <span class="c-k">subset</span>: <span class="c-s">v2</span> }
+  - <span class="c-k">name</span>: <span class="c-s">weighted-rollout</span>              <span class="c-c"># then 95/5 traffic split</span>
+    <span class="c-k">route</span>:
+    - <span class="c-k">destination</span>: { <span class="c-k">host</span>: <span class="c-s">payment-api.payments.svc.cluster.local</span>, <span class="c-k">subset</span>: <span class="c-s">v1</span> }
+      <span class="c-k">weight</span>: <span class="c-n">95</span>
+    - <span class="c-k">destination</span>: { <span class="c-k">host</span>: <span class="c-s">payment-api.payments.svc.cluster.local</span>, <span class="c-k">subset</span>: <span class="c-s">v2</span> }
+      <span class="c-k">weight</span>: <span class="c-n">5</span>
+    <span class="c-k">timeout</span>: <span class="c-s">2s</span>                         <span class="c-c"># hard deadline for the whole call</span>
+    <span class="c-k">retries</span>:
+      <span class="c-k">attempts</span>: <span class="c-n">2</span>
+      <span class="c-k">perTryTimeout</span>: <span class="c-s">800ms</span>
+      <span class="c-k">retryOn</span>: <span class="c-s">connect-failure,refused-stream,503</span>  <span class="c-c"># retry ONLY safe failures</span></code></pre>
+
+<pre><span class="fn">72-destinationrule.yaml</span><code><span class="c-c"># DestinationRule: what happens AFTER routing — subsets, LB, circuit breaking</span>
+<span class="c-k">apiVersion</span>: <span class="c-s">networking.istio.io/v1</span>
+<span class="c-k">kind</span>: <span class="c-s">DestinationRule</span>
+<span class="c-k">metadata</span>: { <span class="c-k">name</span>: <span class="c-s">payment-api-dr</span>, <span class="c-k">namespace</span>: <span class="c-s">payments</span> }
+<span class="c-k">spec</span>:
+  <span class="c-k">host</span>: <span class="c-s">payment-api.payments.svc.cluster.local</span>
+  <span class="c-k">subsets</span>:                              <span class="c-c"># subsets = label-selected pod groups</span>
+  - { <span class="c-k">name</span>: <span class="c-s">v1</span>, <span class="c-k">labels</span>: { <span class="c-k">version</span>: <span class="c-s">v1</span> } }
+  - { <span class="c-k">name</span>: <span class="c-s">v2</span>, <span class="c-k">labels</span>: { <span class="c-k">version</span>: <span class="c-s">v2</span> } }
+  <span class="c-k">trafficPolicy</span>:
+    <span class="c-k">loadBalancer</span>:
+      <span class="c-k">simple</span>: <span class="c-s">LEAST_REQUEST</span>            <span class="c-c"># better tail latency than round robin</span>
+      <span class="c-k">localityLbSetting</span>: { <span class="c-k">enabled</span>: <span class="c-s">true</span> }  <span class="c-c"># prefer same-zone pods (the 10× trick)</span>
+    <span class="c-k">connectionPool</span>:
+      <span class="c-k">http</span>:
+        <span class="c-k">http2MaxRequests</span>: <span class="c-n">1000</span>
+        <span class="c-k">maxRequestsPerConnection</span>: <span class="c-n">0</span>    <span class="c-c"># 0 = unlimited; keep HTTP/2 conns hot</span>
+      <span class="c-k">tcp</span>: { <span class="c-k">maxConnections</span>: <span class="c-n">200</span> }
+    <span class="c-k">outlierDetection</span>:                   <span class="c-c"># circuit breaker: eject sick pods</span>
+      <span class="c-k">consecutive5xxErrors</span>: <span class="c-n">5</span>
+      <span class="c-k">interval</span>: <span class="c-s">10s</span>
+      <span class="c-k">baseEjectionTime</span>: <span class="c-s">30s</span>
+      <span class="c-k">maxEjectionPercent</span>: <span class="c-n">50</span>           <span class="c-c"># never eject &gt; half the fleet</span></code></pre>
+
+<pre><span class="fn">73-security.yaml</span><code><span class="c-c"># Enforce mTLS for every workload in the namespace</span>
+<span class="c-k">apiVersion</span>: <span class="c-s">security.istio.io/v1</span>
+<span class="c-k">kind</span>: <span class="c-s">PeerAuthentication</span>
+<span class="c-k">metadata</span>: { <span class="c-k">name</span>: <span class="c-s">strict-mtls</span>, <span class="c-k">namespace</span>: <span class="c-s">payments</span> }
+<span class="c-k">spec</span>:
+  <span class="c-k">mtls</span>: { <span class="c-k">mode</span>: <span class="c-s">STRICT</span> }              <span class="c-c"># plaintext connections rejected</span>
+---
+<span class="c-c"># L7 authorization: WHO may call payment-api, and how</span>
+<span class="c-k">apiVersion</span>: <span class="c-s">security.istio.io/v1</span>
+<span class="c-k">kind</span>: <span class="c-s">AuthorizationPolicy</span>
+<span class="c-k">metadata</span>: { <span class="c-k">name</span>: <span class="c-s">payment-api-authz</span>, <span class="c-k">namespace</span>: <span class="c-s">payments</span> }
+<span class="c-k">spec</span>:
+  <span class="c-k">selector</span>: { <span class="c-k">matchLabels</span>: { <span class="c-k">app</span>: <span class="c-s">payment-api</span> } }
+  <span class="c-k">action</span>: <span class="c-s">ALLOW</span>
+  <span class="c-k">rules</span>:
+  - <span class="c-k">from</span>:
+    - <span class="c-k">source</span>:
+        <span class="c-k">principals</span>:               <span class="c-c"># SPIFFE identity from the mTLS cert!</span>
+        - <span class="c-s">cluster.local/ns/istio-ingress/sa/ingress-gw-sa</span>
+    <span class="c-k">to</span>:
+    - <span class="c-k">operation</span>: { <span class="c-k">methods</span>: [<span class="c-s">GET</span>, <span class="c-s">POST</span>], <span class="c-k">paths</span>: [<span class="c-s">"/api/*"</span>] }
+  - <span class="c-k">from</span>:
+    - <span class="c-k">source</span>: { <span class="c-k">principals</span>: [<span class="c-s">cluster.local/ns/payments/sa/fraud-svc-sa</span>] }
+    <span class="c-k">to</span>:
+    - <span class="c-k">operation</span>: { <span class="c-k">methods</span>: [<span class="c-s">GET</span>], <span class="c-k">paths</span>: [<span class="c-s">"/internal/risk/*"</span>] }
+---
+<span class="c-c"># End-user auth at the edge: validate JWTs (e.g. from Entra ID / OIDC)</span>
+<span class="c-k">apiVersion</span>: <span class="c-s">security.istio.io/v1</span>
+<span class="c-k">kind</span>: <span class="c-s">RequestAuthentication</span>
+<span class="c-k">metadata</span>: { <span class="c-k">name</span>: <span class="c-s">jwt-auth</span>, <span class="c-k">namespace</span>: <span class="c-s">istio-ingress</span> }
+<span class="c-k">spec</span>:
+  <span class="c-k">selector</span>: { <span class="c-k">matchLabels</span>: { <span class="c-k">istio</span>: <span class="c-s">ingressgateway</span> } }
+  <span class="c-k">jwtRules</span>:
+  - <span class="c-k">issuer</span>: <span class="c-s">"https://login.microsoftonline.com/TENANT/v2.0"</span>
+    <span class="c-k">jwksUri</span>: <span class="c-s">"https://login.microsoftonline.com/TENANT/discovery/v2.0/keys"</span>
+    <span class="c-k">audiences</span>: [<span class="c-s">"api://payment-api"</span>]</code></pre>
+
+<div class="key"><div class="q">The mental model that untangles Istio's YAML zoo</div>
+<p><b>Gateway</b> = "open this door." <b>VirtualService</b> = "read the request, decide the destination." <b>DestinationRule</b> = "having decided, use these manners (LB, pools, circuit breaking, subsets)." <b>PeerAuthentication</b> = "services must show certificates to each other." <b>AuthorizationPolicy</b> = "even with a certificate, here is who may do what." <b>RequestAuthentication</b> = "humans must show a valid JWT."</p></div>
+
+<h3>The Nginx alternative — simpler edge, no mesh</h3>
+<pre><span class="fn">75-nginx-ingress.yaml</span><code><span class="c-k">apiVersion</span>: <span class="c-s">networking.k8s.io/v1</span>
+<span class="c-k">kind</span>: <span class="c-s">Ingress</span>
+<span class="c-k">metadata</span>:
+  <span class="c-k">name</span>: <span class="c-s">payment-api-ingress</span>
+  <span class="c-k">namespace</span>: <span class="c-s">payments</span>
+  <span class="c-k">annotations</span>:
+    <span class="c-k">nginx.ingress.kubernetes.io/ssl-redirect</span>: <span class="c-s">"true"</span>
+    <span class="c-k">nginx.ingress.kubernetes.io/proxy-read-timeout</span>: <span class="c-s">"5"</span>
+    <span class="c-k">nginx.ingress.kubernetes.io/limit-rps</span>: <span class="c-s">"100"</span>       <span class="c-c"># per-client rate limit</span>
+    <span class="c-k">nginx.ingress.kubernetes.io/enable-cors</span>: <span class="c-s">"true"</span>
+    <span class="c-k">cert-manager.io/cluster-issuer</span>: <span class="c-s">letsencrypt-prod</span>  <span class="c-c"># auto-TLS (next altitude)</span>
+<span class="c-k">spec</span>:
+  <span class="c-k">ingressClassName</span>: <span class="c-s">nginx</span>
+  <span class="c-k">tls</span>:
+  - <span class="c-k">hosts</span>: [<span class="c-s">pay.tmo.example</span>]
+    <span class="c-k">secretName</span>: <span class="c-s">pay-tmo-example-tls</span>
+  <span class="c-k">rules</span>:
+  - <span class="c-k">host</span>: <span class="c-s">pay.tmo.example</span>
+    <span class="c-k">http</span>:
+      <span class="c-k">paths</span>:
+      - <span class="c-k">path</span>: <span class="c-s">/api</span>
+        <span class="c-k">pathType</span>: <span class="c-s">Prefix</span>
+        <span class="c-k">backend</span>:
+          <span class="c-k">service</span>: { <span class="c-k">name</span>: <span class="c-s">payment-api</span>, <span class="c-k">port</span>: { <span class="c-k">name</span>: <span class="c-s">http</span> } }</code></pre>
+<p><b>How it works underneath:</b> the ingress-nginx controller pod watches Ingress objects and endpoints, generates an <code>nginx.conf</code> with an <code>upstream</code> block containing the pod IPs, and hot-applies it (backend changes via a Lua layer without full reloads). Choose Nginx ingress when you need a solid HTTP edge; choose Istio when you also need mesh features (mTLS everywhere, per-service traffic policy, canaries between internal services).</p>
+</section>
+
+<!-- ============ 5,000 FT : TLS & CA ============ -->
+<section class="alt" id="s8" data-alt="5000">
+<div class="eyebrow">ALTITUDE 08<span class="ft">5,000 FT</span></div>
+<h2>Certificates &amp; CAs: how trust actually works</h2>
+
+<div class="why"><div class="q">Why do we need a CA? Why not just encrypt?</div>
+<p>Encryption without identity is worthless: you could be having a perfectly encrypted conversation <b>with the attacker</b>. TLS solves two problems at once: (1) <b>who am I talking to?</b> — proven by a certificate, which is a public key signed by someone you already trust (the CA); (2) <b>can anyone read this?</b> — no, keys are agreed via ephemeral Diffie-Hellman. The CA is simply the shared root of trust: "I don't know you, but someone I trust vouched for you." Same logic as passports: you trust the issuing government, not the traveler.</p></div>
+
+<div class="grid2">
+<div class="tile"><h5>Public chain (users → your edge)</h5><p>Browser trusts <b>root CAs</b> baked into the OS. Root signs an <b>intermediate</b>; intermediate signs your <b>leaf cert</b> for pay.tmo.example. Browser verifies the signature chain up to a root it knows. Automated by ACME/Let's Encrypt or your enterprise PKI.</p></div>
+<div class="tile"><h5>Private mesh CA (pod → pod)</h5><p>istiod runs a private CA. Each Envoy sidecar generates a key, sends a CSR with its ServiceAccount token; istiod verifies with the K8s API and signs a short-lived (24h) cert whose SAN is a <b>SPIFFE ID</b>: <code>spiffe://cluster.local/ns/payments/sa/payment-api-sa</code>. Identity = cryptographic, rotated daily, tied to the ServiceAccount — not to an IP.</p></div>
+</div>
+
+<h3>The mTLS handshake between two sidecars (watch it happen)</h3>
+<div class="diagram">
+<svg viewBox="0 0 860 300">
+  <rect class="box" x="40" y="30" width="200" height="50"/><text class="lbl" x="140" y="60" text-anchor="middle">payment-api envoy</text>
+  <rect class="box" x="620" y="30" width="200" height="50"/><text class="lbl" x="720" y="60" text-anchor="middle">fraud-svc envoy</text>
+  <line x1="140" y1="80" x2="140" y2="270" class="wire"/>
+  <line x1="720" y1="80" x2="720" y2="270" class="wire"/>
+
+  <path d="M140,110 L720,110" class="wire-c"/><text class="tiny" x="430" y="103" text-anchor="middle" fill="var(--cyan)">1 · ClientHello (TLS 1.3: key share included — saves a round trip)</text>
+  <path d="M720,150 L140,150" class="wire-g"/><text class="tiny" x="430" y="143" text-anchor="middle" fill="var(--green)">2 · ServerHello + server cert (SPIFFE ID) + CertificateRequest</text>
+  <path d="M140,190 L720,190" class="wire-c"/><text class="tiny" x="430" y="183" text-anchor="middle" fill="var(--cyan)">3 · client cert (its SPIFFE ID) + Finished — BOTH sides now proven</text>
+  <path d="M140,235 L720,235" class="wire-a"/><text class="tiny" x="430" y="228" text-anchor="middle" fill="var(--amber)">4 · application data, encrypted — resumed conns skip 1–3 entirely</text>
+
+  <circle r="5" fill="var(--cyan)" class="pkt" style="offset-path:path('M140,110 L720,110');animation-duration:1.4s"/>
+  <circle r="5" fill="var(--green)" class="pkt" style="offset-path:path('M720,150 L140,150');animation-duration:1.4s;animation-delay:.7s"/>
+  <circle r="5" fill="var(--cyan)" class="pkt" style="offset-path:path('M140,190 L720,190');animation-duration:1.4s;animation-delay:1.4s"/>
+  <circle r="5" fill="var(--amber)" class="pkt" style="offset-path:path('M140,235 L720,235');animation-duration:1.4s;animation-delay:2.2s"/>
+  <text class="tiny" x="430" y="285" text-anchor="middle">"mutual" = the client shows a certificate too. Both sides verify against the same mesh root CA.</text>
+</svg>
+<div class="cap">TLS 1.3 mutual handshake: 1 round trip to establish, ~0 for resumption. This is why steady-state mTLS costs microseconds, not milliseconds.</div>
+</div>
+
+<h3>cert-manager — certificates as Kubernetes objects</h3>
+<div class="why"><div class="q">Why cert-manager?</div><p>Certificates expire. Humans forget. Half the famous outages of the last decade include the sentence "the certificate expired." cert-manager makes certs declarative: you state "this Secret must always hold a valid cert for pay.tmo.example," and a controller (another thermostat!) proves domain ownership via ACME, obtains the cert, and renews it ~30 days before expiry. Forever.</p></div>
+<pre><span class="fn">80-cert-manager.yaml</span><code><span class="c-c"># The issuer: HOW to get certificates (Let's Encrypt via ACME here;</span>
+<span class="c-c"># swap for Vault/Venafi/private PKI in enterprises)</span>
+<span class="c-k">apiVersion</span>: <span class="c-s">cert-manager.io/v1</span>
+<span class="c-k">kind</span>: <span class="c-s">ClusterIssuer</span>
+<span class="c-k">metadata</span>: { <span class="c-k">name</span>: <span class="c-s">letsencrypt-prod</span> }
+<span class="c-k">spec</span>:
+  <span class="c-k">acme</span>:
+    <span class="c-k">server</span>: <span class="c-s">https://acme-v02.api.letsencrypt.org/directory</span>
+    <span class="c-k">email</span>: <span class="c-s">platform-team@tmo.example</span>
+    <span class="c-k">privateKeySecretRef</span>: { <span class="c-k">name</span>: <span class="c-s">le-account-key</span> }
+    <span class="c-k">solvers</span>:
+    - <span class="c-k">dns01</span>:                       <span class="c-c"># DNS-01: prove ownership by writing a TXT</span>
+        <span class="c-k">route53</span>: { <span class="c-k">region</span>: <span class="c-s">us-west-2</span> }   <span class="c-c"># record; works for wildcards too</span>
+---
+<span class="c-c"># The certificate: WHAT you want; controller keeps the Secret fresh</span>
+<span class="c-k">apiVersion</span>: <span class="c-s">cert-manager.io/v1</span>
+<span class="c-k">kind</span>: <span class="c-s">Certificate</span>
+<span class="c-k">metadata</span>: { <span class="c-k">name</span>: <span class="c-s">pay-tmo-example</span>, <span class="c-k">namespace</span>: <span class="c-s">istio-ingress</span> }
+<span class="c-k">spec</span>:
+  <span class="c-k">secretName</span>: <span class="c-s">pay-tmo-example-tls</span>   <span class="c-c"># referenced by the Istio Gateway earlier</span>
+  <span class="c-k">issuerRef</span>: { <span class="c-k">name</span>: <span class="c-s">letsencrypt-prod</span>, <span class="c-k">kind</span>: <span class="c-s">ClusterIssuer</span> }
+  <span class="c-k">dnsNames</span>: [<span class="c-s">pay.tmo.example</span>]
+  <span class="c-k">duration</span>: <span class="c-s">2160h</span>                   <span class="c-c"># 90 days</span>
+  <span class="c-k">renewBefore</span>: <span class="c-s">720h</span>                 <span class="c-c"># renew with 30 days to spare</span>
+  <span class="c-k">privateKey</span>: { <span class="c-k">algorithm</span>: <span class="c-s">ECDSA</span>, <span class="c-k">size</span>: <span class="c-n">256</span> }  <span class="c-c"># smaller, faster handshakes</span></code></pre>
+
+<div class="key"><div class="q">Where else certificates hide in Kubernetes</div>
+<p>The cluster itself runs on TLS everywhere: kubectl→API server (your client cert or OIDC token), API server→etcd, API server→kubelets, kubelet server certs — all issued by the <b>cluster CA</b> created at install (kubeadm) or managed for you (EKS/AKS/GKE). Admission webhooks need certs. So a real cluster has at least <i>three</i> trust domains: public CA (users), cluster CA (K8s internals), mesh CA (workload mTLS). Keep them mentally separate and TLS questions become easy.</p></div>
+</section>
+
+<!-- ============ 2,000 FT : TELEMETRY ============ -->
+<section class="alt" id="s9" data-alt="2000">
+<div class="eyebrow">ALTITUDE 09<span class="ft">2,000 FT</span></div>
+<h2>Telemetry: seeing 35,000 req/s without drowning</h2>
+
+<div class="why"><div class="q">Why three different signals?</div>
+<p>Because each answers a different question at a different cost.<br>
+<b>Metrics</b> (cheap, aggregated numbers): "IS something wrong?" — p99 latency just doubled.<br>
+<b>Traces</b> (sampled, per-request): "WHERE is it wrong?" — the 40 ms hides in fraud-svc's Redis call.<br>
+<b>Logs</b> (expensive, detailed): "WHY is it wrong?" — the exact error, stack trace, and request ID.<br>
+At 35k req/s you cannot log everything verbosely or trace every request — metrics are your always-on radar; traces are sampled (e.g. 1%, plus 100% of errors); logs are structured JSON, searched only after the first two point the finger.</p></div>
+
+<div class="diagram">
+<svg viewBox="0 0 880 300">
+  <rect class="box" x="40" y="40" width="180" height="70" style="stroke:var(--green)"/>
+  <text class="lbl" x="130" y="68" text-anchor="middle" fill="var(--green)">pods + sidecars</text>
+  <text class="sub" x="130" y="90" text-anchor="middle">/metrics · spans · stdout</text>
+
+  <rect class="box" x="300" y="30" width="220" height="55"/>
+  <text class="lbl" x="410" y="52" text-anchor="middle">Prometheus</text>
+  <text class="sub" x="410" y="72" text-anchor="middle">PULLS /metrics every 15s</text>
+
+  <rect class="box" x="300" y="105" width="220" height="55"/>
+  <text class="lbl" x="410" y="127" text-anchor="middle">OTel Collector</text>
+  <text class="sub" x="410" y="147" text-anchor="middle">receives spans, samples, routes</text>
+
+  <rect class="box" x="300" y="180" width="220" height="55"/>
+  <text class="lbl" x="410" y="202" text-anchor="middle">Loki / ELK</text>
+  <text class="sub" x="410" y="222" text-anchor="middle">log aggregation (DaemonSet ships)</text>
+
+  <rect class="box" x="620" y="70" width="200" height="60" style="stroke:var(--amber)"/>
+  <text class="lbl" x="720" y="93" text-anchor="middle" fill="var(--amber)">Grafana</text>
+  <text class="sub" x="720" y="113" text-anchor="middle">one pane: M + T + L linked</text>
+
+  <rect class="box" x="620" y="170" width="200" height="60" style="stroke:var(--red)"/>
+  <text class="lbl" x="720" y="193" text-anchor="middle" fill="var(--red)">Alertmanager</text>
+  <text class="sub" x="720" y="213" text-anchor="middle">dedupe → group → page</text>
+
+  <path class="wire-g" d="M300,57 L220,70"/>
+  <path class="wire-g" d="M220,90 L300,130"/>
+  <path class="wire-g" d="M220,100 L300,205"/>
+  <path class="wire-a" d="M520,57 L620,95"/>
+  <path class="wire-a" d="M520,132 L620,105"/>
+  <path class="wire-a" d="M520,207 L620,115"/>
+  <path class="wire" d="M520,45 C580,45 600,180 620,190" stroke="var(--red)"/>
+  <circle r="4" fill="var(--green)" class="pkt" style="offset-path:path('M300,57 L220,70')"/>
+  <circle r="4" fill="var(--green)" class="pkt" style="offset-path:path('M220,90 L300,130');animation-delay:.6s"/>
+  <circle r="4" fill="var(--green)" class="pkt" style="offset-path:path('M220,100 L300,205');animation-delay:1.2s"/>
+  <circle r="4" fill="var(--amber)" class="pkt" style="offset-path:path('M520,132 L620,105');animation-delay:1.8s"/>
+  <circle r="4" fill="var(--red)" class="pkt" style="offset-path:path('M520,45 C580,45 600,180 620,190');animation-delay:2.4s"/>
+  <text class="tiny" x="430" y="280" text-anchor="middle">note the direction on Prometheus: it PULLS (scrapes). Pull = the monitoring system notices when a target vanishes.</text>
+</svg>
+<div class="cap">The observability plane. A silent bonus of Istio: every Envoy already emits uniform metrics and trace spans for every service — L7 observability with zero app changes.</div>
+</div>
+
+<h3>The four golden signals (Google SRE) — your dashboard skeleton</h3>
+<table>
+<tr><th>Signal</th><th>Question</th><th>PromQL you'd actually run</th></tr>
+<tr><td><b>Traffic</b></td><td>How much demand?</td><td><code>sum(rate(http_server_requests_seconds_count[1m]))</code></td></tr>
+<tr><td><b>Errors</b></td><td>What fraction fails?</td><td><code>sum(rate(...{status=~"5.."}[5m])) / sum(rate(...[5m]))</code></td></tr>
+<tr><td><b>Latency</b></td><td>p99 experience? (never averages!)</td><td><code>histogram_quantile(0.99, sum by (le) (rate(http_server_requests_seconds_bucket[5m])))</code></td></tr>
+<tr><td><b>Saturation</b></td><td>How close to a wall?</td><td><code>container_memory_working_set_bytes / on(...) kube_pod_container_resource_limits{resource="memory"}</code> · plus CPU throttling: <code>rate(container_cpu_cfs_throttled_periods_total[5m])</code></td></tr>
+</table>
+
+<h3>Wiring it: ServiceMonitor, alert rule, OTel collector</h3>
+<pre><span class="fn">90-telemetry.yaml</span><code><span class="c-c"># Prometheus Operator: "scrape every service labeled app=payment-api"</span>
+<span class="c-k">apiVersion</span>: <span class="c-s">monitoring.coreos.com/v1</span>
+<span class="c-k">kind</span>: <span class="c-s">ServiceMonitor</span>
+<span class="c-k">metadata</span>: { <span class="c-k">name</span>: <span class="c-s">payment-api</span>, <span class="c-k">namespace</span>: <span class="c-s">payments</span> }
+<span class="c-k">spec</span>:
+  <span class="c-k">selector</span>: { <span class="c-k">matchLabels</span>: { <span class="c-k">app</span>: <span class="c-s">payment-api</span> } }
+  <span class="c-k">endpoints</span>:
+  - <span class="c-k">port</span>: <span class="c-s">http</span>
+    <span class="c-k">path</span>: <span class="c-s">/actuator/prometheus</span>
+    <span class="c-k">interval</span>: <span class="c-s">15s</span>
+---
+<span class="c-c"># Alert on the symptom users feel — not on CPU</span>
+<span class="c-k">apiVersion</span>: <span class="c-s">monitoring.coreos.com/v1</span>
+<span class="c-k">kind</span>: <span class="c-s">PrometheusRule</span>
+<span class="c-k">metadata</span>: { <span class="c-k">name</span>: <span class="c-s">payment-api-alerts</span>, <span class="c-k">namespace</span>: <span class="c-s">payments</span> }
+<span class="c-k">spec</span>:
+  <span class="c-k">groups</span>:
+  - <span class="c-k">name</span>: <span class="c-s">payment-api.slo</span>
+    <span class="c-k">rules</span>:
+    - <span class="c-k">alert</span>: <span class="c-s">HighErrorRate</span>
+      <span class="c-k">expr</span>: |
+        <span class="c-s">sum(rate(http_server_requests_seconds_count{app="payment-api",status=~"5.."}[5m]))
+        / sum(rate(http_server_requests_seconds_count{app="payment-api"}[5m])) &gt; 0.01</span>
+      <span class="c-k">for</span>: <span class="c-s">2m</span>            <span class="c-c"># must persist 2 min — kills flappy pages</span>
+      <span class="c-k">labels</span>: { <span class="c-k">severity</span>: <span class="c-s">page</span> }
+      <span class="c-k">annotations</span>:
+        <span class="c-k">summary</span>: <span class="c-s">"payment-api 5xx &gt; 1% for 2m"</span>
+    - <span class="c-k">alert</span>: <span class="c-s">P99LatencyBudgetBurn</span>
+      <span class="c-k">expr</span>: |
+        <span class="c-s">histogram_quantile(0.99, sum by (le)
+          (rate(http_server_requests_seconds_bucket{app="payment-api"}[5m]))) &gt; 0.25</span>
+      <span class="c-k">for</span>: <span class="c-s">5m</span>
+      <span class="c-k">labels</span>: { <span class="c-k">severity</span>: <span class="c-s">page</span> }
+---
+<span class="c-c"># OpenTelemetry Collector: one pipeline for traces (as a ConfigMap excerpt)</span>
+<span class="c-k">apiVersion</span>: <span class="c-s">v1</span>
+<span class="c-k">kind</span>: <span class="c-s">ConfigMap</span>
+<span class="c-k">metadata</span>: { <span class="c-k">name</span>: <span class="c-s">otel-collector-conf</span>, <span class="c-k">namespace</span>: <span class="c-s">monitoring</span> }
+<span class="c-k">data</span>:
+  <span class="c-k">config.yaml</span>: |
+    <span class="c-s">receivers:</span>
+      <span class="c-s">otlp: { protocols: { grpc: { endpoint: 0.0.0.0:4317 } } }</span>
+    <span class="c-s">processors:</span>
+      <span class="c-s">batch: {}</span>
+      <span class="c-s">tail_sampling:</span>            <span class="c-c"># the smart part: decide AFTER seeing the trace</span>
+        <span class="c-s">policies:</span>
+        <span class="c-s">- { name: errors,    type: status_code, status_code: { status_codes: [ERROR] } }</span>
+        <span class="c-s">- { name: slow,      type: latency, latency: { threshold_ms: 250 } }</span>
+        <span class="c-s">- { name: baseline,  type: probabilistic, probabilistic: { sampling_percentage: 1 } }</span>
+    <span class="c-s">exporters:</span>
+      <span class="c-s">otlp/tempo: { endpoint: tempo.monitoring:4317, tls: { insecure: true } }</span>
+    <span class="c-s">service:</span>
+      <span class="c-s">pipelines:</span>
+        <span class="c-s">traces: { receivers: [otlp], processors: [tail_sampling, batch], exporters: [otlp/tempo] }</span></code></pre>
+
+<div class="key"><div class="q">Tracing in one picture (words edition)</div>
+<p>The edge gateway stamps each request with a <b>trace ID</b> (W3C <code>traceparent</code> header). Every hop creates a <b>span</b> (its own timed segment, pointing at its parent) and forwards the header. The collector reassembles spans into a waterfall. Reading a trace: the widest bar that isn't waiting on a child is your bottleneck. Tail sampling keeps 100% of errors and slow traces but only 1% of boring ones — full insight at 1% of the cost.</p></div>
+</section>
+
+<!-- ============ GROUND LEVEL ============ -->
+<section class="alt" id="s10" data-alt="0">
+<div class="eyebrow">ALTITUDE 10<span class="ft">GROUND LEVEL · 0 FT</span></div>
+<h2>Touchdown: the complete deployment, start to finish</h2>
+
+<p class="lead">Everything above, assembled. Here is the repo layout, the exact order to apply it, and how to verify each layer. This is the runbook you'd actually follow.</p>
+
+<pre><span class="fn">repo layout</span><code>payment-api/
+├── Dockerfile                  <span class="c-c"># multi-stage (Altitude 03)</span>
+├── .dockerignore
+├── docker-compose.yml          <span class="c-c"># local dev</span>
+├── src/ · pom.xml
+└── k8s/
+    ├── 00-namespace.yaml       <span class="c-c"># Namespace + ResourceQuota</span>
+    ├── 10-configmap.yaml
+    ├── 11-secret.yaml          <span class="c-c"># (in reality: ExternalSecret manifest)</span>
+    ├── 20-rbac.yaml            <span class="c-c"># SA + Role + RoleBinding</span>
+    ├── 30-deployment.yaml
+    ├── 40-service.yaml
+    ├── 50-hpa.yaml
+    ├── 51-pdb.yaml
+    ├── 60-networkpolicy.yaml
+    ├── 70-istio-gateway.yaml
+    ├── 71-virtualservice.yaml
+    ├── 72-destinationrule.yaml
+    ├── 73-security.yaml        <span class="c-c"># PeerAuthentication + AuthorizationPolicy + JWT</span>
+    ├── 80-cert-manager.yaml
+    └── 90-telemetry.yaml       <span class="c-c"># ServiceMonitor + PrometheusRule + OTel</span></code></pre>
+
+<h3>Build, ship, deploy — the exact commands</h3>
+<pre><code><span class="c-c"># 1 · build & push the image (CI does this on every merge)</span>
+docker build -t registry.tmo.example/payments/payment-api:1.4.2 .
+docker push registry.tmo.example/payments/payment-api:1.4.2
+
+<span class="c-c"># 2 · foundation: namespace, quota, identity, config</span>
+kubectl apply -f k8s/00-namespace.yaml
+kubectl apply -f k8s/20-rbac.yaml
+kubectl apply -f k8s/10-configmap.yaml -f k8s/11-secret.yaml
+
+<span class="c-c"># 3 · workload + stable address</span>
+kubectl apply -f k8s/30-deployment.yaml -f k8s/40-service.yaml
+kubectl -n payments rollout status deploy/payment-api     <span class="c-c"># waits for readiness</span>
+
+<span class="c-c"># 4 · resilience & scaling</span>
+kubectl apply -f k8s/50-hpa.yaml -f k8s/51-pdb.yaml -f k8s/60-networkpolicy.yaml
+
+<span class="c-c"># 5 · edge & mesh</span>
+kubectl apply -f k8s/80-cert-manager.yaml
+kubectl apply -f k8s/70-istio-gateway.yaml -f k8s/71-virtualservice.yaml \
+              -f k8s/72-destinationrule.yaml -f k8s/73-security.yaml
+
+<span class="c-c"># 6 · observability</span>
+kubectl apply -f k8s/90-telemetry.yaml</code></pre>
+
+<h3>Verify each layer (the debugging ladder)</h3>
+<pre><code><span class="c-c"># Is the pod healthy? (events section = 90% of answers)</span>
+kubectl -n payments get pods -o wide
+kubectl -n payments describe pod payment-api-xxxxx
+kubectl -n payments logs deploy/payment-api --previous   <span class="c-c"># logs of the CRASHED container</span>
+
+<span class="c-c"># Is the Service actually selecting pods? (empty ENDPOINTS = label mismatch or readiness failing)</span>
+kubectl -n payments get endpointslices -l kubernetes.io/service-name=payment-api
+
+<span class="c-c"># Can I reach it from inside the cluster? (tests Service + DNS + NetworkPolicy)</span>
+kubectl -n payments run tmp --rm -it --image=curlimages/curl -- \
+  curl -s http://payment-api.payments.svc.cluster.local/actuator/health
+
+<span class="c-c"># Is mTLS on? Is routing right? (istioctl reads the live Envoy config)</span>
+istioctl x describe pod payment-api-xxxxx -n payments
+istioctl proxy-config routes deploy/istio-ingressgateway -n istio-ingress
+
+<span class="c-c"># Is the cert real & fresh?</span>
+kubectl -n istio-ingress get certificate pay-tmo-example -o wide
+
+<span class="c-c"># Is scaling behaving?</span>
+kubectl -n payments get hpa payment-api --watch
+
+<span class="c-c"># Emergency exits</span>
+kubectl -n payments rollout undo deploy/payment-api      <span class="c-c"># instant rollback</span>
+kubectl -n payments rollout history deploy/payment-api</code></pre>
+
+<h3>Best-practices checklist (print this)</h3>
+<div class="grid2">
+<div class="tile"><h5>Images & Docker</h5><p>☐ multi-stage builds · ☐ pinned tags + digests · ☐ non-root USER · ☐ .dockerignore · ☐ exec-form ENTRYPOINT · ☐ scan images (Trivy) in CI · ☐ one process per container · ☐ logs to stdout</p></div>
+<div class="tile"><h5>Workloads</h5><p>☐ requests set on everything · ☐ memory limit = request · ☐ think hard before CPU limits · ☐ all three probes, correctly separated · ☐ preStop sleep + grace period · ☐ topology spread across zones · ☐ PDBs on every service</p></div>
+<div class="tile"><h5>Traffic</h5><p>☐ maxUnavailable: 0 rollouts · ☐ canary via mesh weights · ☐ timeouts &amp; bounded retries (retry budgets!) · ☐ outlier detection · ☐ locality-aware LB · ☐ HTTP/2 keep-alive between services</p></div>
+<div class="tile"><h5>Security</h5><p>☐ default-deny NetworkPolicies · ☐ STRICT mTLS · ☐ least-privilege RBAC per SA · ☐ no secrets in Git (External Secrets) · ☐ readOnlyRootFilesystem, drop ALL caps · ☐ admission policies (no root, no :latest)</p></div>
+<div class="tile"><h5>Telemetry</h5><p>☐ golden-signal dashboard per service · ☐ alert on symptoms with "for:" windows · ☐ p99, never averages · ☐ tail-sampled traces · ☐ structured JSON logs with trace IDs · ☐ watch CPU throttling explicitly</p></div>
+<div class="tile"><h5>Scale & cost</h5><p>☐ HPA on real load metric, slow scale-down · ☐ Cluster Autoscaler / Karpenter for nodes · ☐ quotas per namespace · ☐ cache before DB on hot paths · ☐ load-test to find the real per-pod ceiling</p></div>
+</div>
+
+<hr class="sep">
+<h3>Say it back three ways (the forgetting-proof recap)</h3>
+<p>If you can produce these three explanations from memory, the whole page is yours:</p>
+<div class="grid3">
+<div class="tile"><h5>To a child</h5><p>"Kubernetes is a robot manager for computer programs. You write a wish list — 'always keep six copies running' — and the robot checks the list forever, fixing anything that breaks, even at 3 AM."</p></div>
+<div class="tile"><h5>To an engineer</h5><p>"A declarative reconciliation system: desired state in etcd behind one API server; independent controllers watch, diff, and act. Networking gives every pod an IP, Services a stable VIP, and L4/L7 layers (kube-proxy, Envoy, Istio) route, secure, and observe traffic."</p></div>
+<div class="tile"><h5>To an interviewer, under fire</h5><p>"At 35k req/s peak, the design is: anycast to the nearest region, terminate TLS at Envoy, stay in-zone via locality LB, serve from RAM (Redis), write async, cap every hop with timeouts + outlier ejection, spread across zones with PDBs, and alert on p99 and error-rate SLOs — because the budget is microseconds and the enemy is any hop you didn't need."</p></div>
+</div>
+
+<p style="margin-top:40px;font-family:var(--mono);font-size:13px;color:var(--faint)">— END OF DESCENT · re-read one altitude per day; explain each diagram out loud before moving on —</p>
+</section>
+</main>
+
+<script>
+(function(){
+  const secs=[...document.querySelectorAll('section.alt')];
+  const track=document.getElementById('railtrack');
+  const fill=document.getElementById('railfill');
+  const plane=document.getElementById('plane');
+  const altnum=document.getElementById('altnum');
+  // build markers
+  secs.forEach((s,i)=>{
+    const m=document.createElement('div');
+    m.className='railmark';
+    m.style.top=(i/(secs.length-1)*100)+'%';
+    m.dataset.label=(+s.dataset.alt).toLocaleString()+' ft';
+    m.addEventListener('click',()=>s.scrollIntoView({behavior:'smooth'}));
+    track.appendChild(m);
+  });
+  const marks=[...track.querySelectorAll('.railmark')];
+  function update(){
+    const doc=document.documentElement;
+    const p=Math.min(1,Math.max(0,scrollY/(doc.scrollHeight-innerHeight)));
+    fill.style.height=(p*100)+'%';
+    plane.style.top='calc('+(p*100)+'% - 10px)';
+    plane.textContent=p<0.15?'🛰️':(p<0.85?'✈️':'🛬');
+    altnum.textContent=Math.round(100000*(1-p)).toLocaleString();
+    // active marker
+    let active=0;
+    secs.forEach((s,i)=>{ if(s.getBoundingClientRect().top<innerHeight*0.4) active=i; });
+    marks.forEach((m,i)=>m.classList.toggle('active',i<=active));
+  }
+  addEventListener('scroll',update,{passive:true});
+  update();
+})();
+</script>
+</body>
+</html>
